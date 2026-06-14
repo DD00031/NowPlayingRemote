@@ -21,7 +21,6 @@
 		A001000000000011 /* LyricsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A002000000000011 /* LyricsManager.swift */; };
 		A001000000000012 /* NowPlayingRemoteIcon.svg in Resources */ = {isa = PBXBuildFile; fileRef = A002000000000012 /* NowPlayingRemoteIcon.svg */; };
 		A001000000000013 /* HomescreenIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = A002000000000013 /* HomescreenIcon.png */; };
-		A001000000000014 /* CustomPlayerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A002000000000014 /* CustomPlayerViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -53,7 +52,6 @@
 		A002000000000011 /* LyricsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsManager.swift; sourceTree = "<group>"; };
 		A002000000000012 /* NowPlayingRemoteIcon.svg */ = {isa = PBXFileReference; lastKnownFileType = image.svg; path = NowPlayingRemoteIcon.svg; sourceTree = "<group>"; };
 		A002000000000013 /* HomescreenIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = HomescreenIcon.png; sourceTree = "<group>"; };
-		A002000000000014 /* CustomPlayerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlayerViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,7 +89,6 @@
 				A002000000000007 /* Assets.xcassets */,
 				A002000000000012 /* NowPlayingRemoteIcon.svg */,
 				A002000000000013 /* HomescreenIcon.png */,
-				A002000000000014 /* CustomPlayerViewController.swift */,
 				A002000000000008 /* Info.plist */,
 			);
 			path = NowPlayingRemote;
@@ -187,7 +184,6 @@
 				A001000000000001 /* AppDelegate.swift in Sources */,
 				A001000000000010 /* QRCodeWindowController.swift in Sources */,
 				A001000000000011 /* LyricsManager.swift in Sources */,
-				A001000000000014 /* CustomPlayerViewController.swift in Sources */,
 				A001000000000002 /* MenuBarController.swift in Sources */,
 				A001000000000003 /* MediaController.swift in Sources */,
 				A001000000000004 /* HTTPServer.swift in Sources */,

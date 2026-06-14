@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import UniformTypeIdentifiers
 
 final class SettingsViewController: NSViewController {
 
@@ -7,18 +8,20 @@ final class SettingsViewController: NSViewController {
     private let settings: SettingsManager
 
     // UI
-    private var portField       = NSTextField()
-    private var portStepper     = NSStepper()
-    private var autoStartCheck  = NSButton()
+    private var portField        = NSTextField()
+    private var portStepper      = NSStepper()
+    private var autoStartCheck   = NSButton()
     private var launchLoginCheck = NSButton()
-    private var skipPopup       = NSPopUpButton()
-    private var volumeCheck     = NSButton()
-    private var likeCheck       = NSButton()
-    private var lyricsCheck     = NSButton()
-    private var serverToggleBtn = NSButton()
-    private var statusLabel     = NSTextField()
-    private var urlLabel        = NSTextField()
-    private var applyPortBtn    = NSButton()
+    private var skipPopup        = NSPopUpButton()
+    private var volumeCheck      = NSButton()
+    private var likeCheck        = NSButton()
+    private var lyricsCheck      = NSButton()
+    private var serverToggleBtn  = NSButton()
+    private var statusLabel      = NSTextField()
+    private var urlLabel         = NSTextField()
+    private var applyPortBtn     = NSButton()
+    private var customFileLabel  = NSTextField()
+    private var resetCustomBtn   = NSButton()
 
     init(httpServer: HTTPServer, settings: SettingsManager) {
         self.httpServer = httpServer
@@ -29,7 +32,7 @@ final class SettingsViewController: NSViewController {
     required init?(coder: NSCoder) { fatalError() }
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 516))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 636))
     }
 
     override func viewDidLoad() {
@@ -41,7 +44,7 @@ final class SettingsViewController: NSViewController {
     // MARK: - UI Construction
 
     private func buildUI() {
-        var y: CGFloat = 466
+        var y: CGFloat = 586
 
         func addLabel(_ text: String, x: CGFloat, width: CGFloat, yOff: CGFloat = 0) -> NSTextField {
             let lbl = NSTextField(labelWithString: text)
@@ -178,6 +181,31 @@ final class SettingsViewController: NSViewController {
         view.addSubview(lyricsCheck)
         y -= 40
 
+        // ── Custom Player ─────────────────────────────────────────────────
+        separator()
+        section("Custom Player")
+
+        customFileLabel = NSTextField(labelWithString: customPlayerStatusText())
+        customFileLabel.frame = NSRect(x: 20, y: y, width: 380, height: 18)
+        customFileLabel.font = .systemFont(ofSize: 12)
+        customFileLabel.textColor = settings.customPlayerHTML != nil ? .systemGreen : .secondaryLabelColor
+        view.addSubview(customFileLabel)
+        y -= 30
+
+        let importBtn = NSButton(title: "Import HTML File…", target: self, action: #selector(importHTMLFile))
+        importBtn.frame = NSRect(x: 20, y: y, width: 160, height: 24)
+        importBtn.bezelStyle = .rounded
+        importBtn.controlSize = .small
+        view.addSubview(importBtn)
+
+        resetCustomBtn = NSButton(title: "Reset to Default", target: self, action: #selector(resetCustomPlayer))
+        resetCustomBtn.frame = NSRect(x: 190, y: y, width: 140, height: 24)
+        resetCustomBtn.bezelStyle = .rounded
+        resetCustomBtn.controlSize = .small
+        resetCustomBtn.isEnabled = settings.customPlayerHTML != nil
+        view.addSubview(resetCustomBtn)
+        y -= 40
+
         // ── Footer ────────────────────────────────────────────────────────
         separator()
         let note = NSTextField(wrappingLabelWithString: "Changes to port, volume, or like button require restarting the server.")
@@ -192,6 +220,15 @@ final class SettingsViewController: NSViewController {
         btn.frame = NSRect(x: 20, y: y, width: 380, height: 20)
         btn.font = .systemFont(ofSize: 13)
         return btn
+    }
+
+    private func customPlayerStatusText() -> String {
+        if let name = settings.customPlayerFileName {
+            return "Active: \(name)"
+        } else if settings.customPlayerHTML != nil {
+            return "Custom player active"
+        }
+        return "No custom player set"
     }
 
     // MARK: - Refresh
@@ -266,6 +303,46 @@ final class SettingsViewController: NSViewController {
 
     @objc private func lyricsChanged() {
         settings.showLyrics = lyricsCheck.state == .on
+    }
+
+    @objc private func importHTMLFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Select HTML Player File"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if #available(macOS 11.0, *) {
+            panel.allowedContentTypes = [.html]
+        } else {
+            panel.allowedFileTypes = ["html", "htm"]
+        }
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            do {
+                let html = try String(contentsOf: url, encoding: .utf8)
+                self.settings.customPlayerHTML = html
+                self.settings.customPlayerFileName = url.lastPathComponent
+                DispatchQueue.main.async {
+                    self.customFileLabel.stringValue = self.customPlayerStatusText()
+                    self.customFileLabel.textColor = .systemGreen
+                    self.resetCustomBtn.isEnabled = true
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    let alert = NSAlert()
+                    alert.messageText = "Could not read file"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc private func resetCustomPlayer() {
+        settings.customPlayerHTML = nil
+        settings.customPlayerFileName = nil
+        customFileLabel.stringValue = "No custom player set"
+        customFileLabel.textColor = .secondaryLabelColor
+        resetCustomBtn.isEnabled = false
     }
 
     // MARK: - Helpers

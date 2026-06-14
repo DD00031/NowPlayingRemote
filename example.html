@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Now Playing">
+<meta name="theme-color" content="#111">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<title>Now Playing</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; background: #111; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased; user-select: none; }
+
+  /* Root container — position:fixed avoids the iOS PWA bottom gap */
+  .root {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0;
+    padding: max(env(safe-area-inset-top), 32px) 24px
+             max(env(safe-area-inset-bottom), 32px);
+  }
+
+  /* Artwork */
+  #art-wrap {
+    width: min(60vw, 60vh, 280px); height: min(60vw, 60vh, 280px);
+    border-radius: 18px; overflow: hidden; flex-shrink: 0;
+    background: #222;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    margin-bottom: 28px;
+    transition: transform 0.4s ease;
+  }
+  #art-wrap.playing { transform: scale(1.03); }
+  #art { width: 100%; height: 100%; object-fit: cover; display: none; }
+  #art-placeholder { width: 100%; height: 100%; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 72px; opacity: 0.3; }
+
+  /* Track info */
+  .info { width: 100%; max-width: 320px; text-align: center; margin-bottom: 20px; }
+  #title  { font-size: 20px; font-weight: 700; line-height: 1.2;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #artist { font-size: 15px; color: rgba(255,255,255,0.6); margin-top: 4px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Progress */
+  .progress-wrap { width: 100%; max-width: 320px; margin-bottom: 6px; }
+  #progress {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 22px; background: transparent; cursor: pointer;
+    outline: none; --fill: 0%;
+  }
+  #progress::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right,
+      rgba(255,255,255,0.85) var(--fill),
+      rgba(255,255,255,0.2)  var(--fill));
+  }
+  #progress::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; cursor: pointer; margin-top: -6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .time-row { display: flex; justify-content: space-between;
+    font-size: 11px; color: rgba(255,255,255,0.45);
+    font-variant-numeric: tabular-nums; margin-bottom: 20px; }
+
+  /* Controls */
+  .controls { display: flex; align-items: center; justify-content: center;
+    gap: 12px; width: 100%; max-width: 320px; }
+  button { background: none; border: none; cursor: pointer; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation; transition: opacity 0.12s, transform 0.12s; }
+  button:active { opacity: 0.6; transform: scale(0.88); }
+  .btn-play { width: 64px; height: 64px;
+    background: rgba(255,255,255,0.12); backdrop-filter: blur(8px); }
+  .btn-nav  { width: 44px; height: 44px; opacity: 0.8; }
+
+  /* Connection dot */
+  #dot { position: fixed; top: max(env(safe-area-inset-top), 12px); right: 14px;
+    width: 8px; height: 8px; border-radius: 50%; background: #f44;
+    transition: background 0.3s; }
+  #dot.ok { background: #4f4; }
+</style>
+</head>
+<body>
+<div id="dot"></div>
+
+<div class="root">
+  <div id="art-wrap">
+    <img id="art" alt="">
+    <div id="art-placeholder">♪</div>
+  </div>
+
+  <div class="info">
+    <div id="title">Nothing Playing</div>
+    <div id="artist"></div>
+  </div>
+
+  <div class="progress-wrap">
+    <input id="progress" type="range" min="0" max="1000" value="0" step="1">
+    <div class="time-row">
+      <span id="elapsed">0:00</span>
+      <span id="remaining">0:00</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-nav" onclick="cmd('previousTrack')" aria-label="Previous">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+    </button>
+    <button class="btn-play" id="btn-play" onclick="cmd('togglePlayPause')" aria-label="Play/Pause">
+      <svg id="ico-play"  viewBox="0 0 24 24" fill="currentColor" width="30" height="30"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="30" height="30" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
+    <button class="btn-nav" onclick="cmd('nextTrack')" aria-label="Next">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let state       = {};
+  let artworkVer  = -1;
+  let isDragging  = false;
+  let ticker      = null;
+  let evtSrc      = null;
+  let retryDelay  = 1000;
+
+  const $ = id => document.getElementById(id);
+
+  // ── SSE ────────────────────────────────────────────────────────────────────
+  function connect() {
+    if (evtSrc) evtSrc.close();
+    evtSrc = new EventSource('/events');
+    evtSrc.onopen    = () => { $('dot').className = 'ok'; retryDelay = 1000; };
+    evtSrc.onmessage = e  => { try { apply(JSON.parse(e.data)); } catch (_) {} };
+    evtSrc.onerror   = () => {
+      $('dot').className = '';
+      evtSrc.close(); evtSrc = null;
+      setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 1.5, 15000);
+    };
+  }
+
+  // ── Apply state ────────────────────────────────────────────────────────────
+  function apply(s) {
+    state = s;
+
+    if (!s.hasMedia) {
+      $('title').textContent  = 'Nothing Playing';
+      $('artist').textContent = '';
+      $('ico-play').style.display  = 'block';
+      $('ico-pause').style.display = 'none';
+      $('art-wrap').classList.remove('playing');
+      artworkVer = -1; clearArt();
+      stopTick(); setProgress(0, 0);
+      return;
+    }
+
+    $('title').textContent  = s.title  || 'Unknown';
+    $('artist').textContent = s.artist || '';
+
+    const playing = s.isPlaying || (s.playbackRate > 0);
+    $('ico-play').style.display  = playing ? 'none'  : 'block';
+    $('ico-pause').style.display = playing ? 'block' : 'none';
+    $('art-wrap').classList.toggle('playing', playing);
+
+    if (s.hasArtwork && s.artworkVersion !== artworkVer) {
+      artworkVer = s.artworkVersion;
+      const img  = new Image();
+      img.onload = () => { $('art').src = img.src; $('art').style.display = 'block'; $('art-placeholder').style.display = 'none'; };
+      img.src    = '/api/artwork?' + Date.now();
+    } else if (!s.hasArtwork) {
+      clearArt();
+    }
+
+    startTick();
+  }
+
+  function clearArt() {
+    $('art').style.display = 'none'; $('art').src = '';
+    $('art-placeholder').style.display = 'flex';
+  }
+
+  // ── Progress ────────────────────────────────────────────────────────────────
+  function elapsed() {
+    if (state.timestampEpochMicros == null) return 0;
+    const rate  = state.playbackRate ?? 0;
+    const base  = (state.elapsedTimeMicros ?? 0) / 1e6;
+    const stamp = state.timestampEpochMicros / 1e6;
+    return Math.max(0, base + (Date.now() / 1000 - stamp) * rate);
+  }
+
+  function setProgress(secs, dur) {
+    const pct = dur > 0 ? Math.min(secs / dur, 1) : 0;
+    if (!isDragging) {
+      $('progress').value = Math.round(pct * 1000);
+      $('progress').style.setProperty('--fill', (pct * 100) + '%');
+    }
+    $('elapsed').textContent   = fmt(secs);
+    $('remaining').textContent = '-' + fmt(Math.max(0, dur - secs));
+  }
+
+  function startTick() {
+    stopTick();
+    const tick = () => setProgress(elapsed(), (state.durationMicros ?? 0) / 1e6);
+    tick();
+    ticker = setInterval(tick, 500);
+  }
+  function stopTick() { clearInterval(ticker); ticker = null; }
+
+  const pb = $('progress');
+  pb.addEventListener('mousedown',  () => isDragging = true);
+  pb.addEventListener('touchstart', () => isDragging = true, { passive: true });
+  pb.addEventListener('input', () => {
+    const pct = pb.value / 1000;
+    pb.style.setProperty('--fill', (pct * 100) + '%');
+    const dur = (state.durationMicros ?? 0) / 1e6;
+    $('elapsed').textContent   = fmt(pct * dur);
+    $('remaining').textContent = '-' + fmt(Math.max(0, dur - pct * dur));
+  });
+  pb.addEventListener('change', () => {
+    isDragging = false;
+    if (!state.durationMicros) return;
+    cmd('seek', (pb.value / 1000) * (state.durationMicros / 1e6));
+  });
+
+  // ── Commands ────────────────────────────────────────────────────────────────
+  window.cmd = (command, value) =>
+    fetch('/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value !== undefined ? { command, value } : { command })
+    }).catch(() => {});
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function fmt(secs) {
+    const s = Math.floor(secs), m = Math.floor(s / 60), h = Math.floor(m / 60);
+    return h > 0 ? `${h}:${pad(m % 60)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  connect();
+})();
+</script>
+</body>
+</html>

@@ -5,7 +5,6 @@ final class MenuBarController {
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private var settingsWindow: NSWindow?
-    private var customPlayerWindow: NSWindow?
     private let qrController = QRCodeWindowController()
 
     private let mediaController: MediaController
@@ -92,12 +91,6 @@ final class MenuBarController {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
-        let customHTML = settings.customPlayerHTML != nil
-        let customTitle = customHTML ? "Custom Player… ✓" : "Custom Player…"
-        let customItem = NSMenuItem(title: customTitle, action: #selector(openCustomPlayer), keyEquivalent: "")
-        customItem.target = self
-        menu.addItem(customItem)
-
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -135,31 +128,11 @@ final class MenuBarController {
         return "http://\(ip):\(httpServer.currentPort)"
     }
 
-    @objc private func openCustomPlayer() {
-        if customPlayerWindow == nil {
-            let vc = CustomPlayerViewController(settings: settings)
-            let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 700, height: 560),
-                styleMask: [.titled, .closable, .resizable],
-                backing: .buffered,
-                defer: false
-            )
-            win.title = "Now Playing Remote — Custom Player"
-            win.contentViewController = vc
-            win.minSize = NSSize(width: 560, height: 400)
-            win.center()
-            win.isReleasedWhenClosed = false
-            customPlayerWindow = win
-        }
-        customPlayerWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
     @objc private func openSettings() {
         if settingsWindow == nil {
             let vc = SettingsViewController(httpServer: httpServer, settings: settings)
             let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 480),
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 636),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
