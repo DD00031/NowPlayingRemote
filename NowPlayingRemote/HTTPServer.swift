@@ -174,7 +174,7 @@ final class HTTPServer {
     // MARK: - Route handlers
 
     private func servePlayer(_ fd: Int32) {
-        let html = playerHTML(settings: settings)
+        let html = settings.customPlayerHTML ?? playerHTML(settings: settings)
         let response = httpResponse(status: "200 OK",
                                     contentType: "text/html; charset=utf-8",
                                     body: html.data(using: .utf8) ?? Data())

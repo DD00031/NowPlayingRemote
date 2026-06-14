@@ -15,6 +15,7 @@ final class SettingsManager {
         case showLikeButton     = "showLikeButton"
         case launchAtLogin      = "launchAtLogin"
         case showLyrics         = "showLyrics"
+        case customPlayerHTML   = "customPlayerHTML"
     }
 
     private init() {}
@@ -55,6 +56,12 @@ final class SettingsManager {
     var showLyrics: Bool {
         get { defaults.object(forKey: Key.showLyrics.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.showLyrics.rawValue) }
+    }
+
+    /// nil means "use the built-in player"
+    var customPlayerHTML: String? {
+        get { defaults.string(forKey: Key.customPlayerHTML.rawValue) }
+        set { defaults.set(newValue, forKey: Key.customPlayerHTML.rawValue) }
     }
 
     private func applyLaunchAtLogin(_ enabled: Bool) {
