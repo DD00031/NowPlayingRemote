@@ -20,6 +20,7 @@ final class SettingsManager {
         case customPlayerJS       = "customPlayerJS"
         case customPlayerJSFileName = "customPlayerJSFileName"
         case selectedTheme        = "selectedTheme"
+        case lyricsAutoHide       = "lyricsAutoHide"
     }
 
     private init() {}
@@ -81,6 +82,11 @@ final class SettingsManager {
     var customPlayerJSFileName: String? {
         get { defaults.string(forKey: Key.customPlayerJSFileName.rawValue) }
         set { defaults.set(newValue, forKey: Key.customPlayerJSFileName.rawValue) }
+    }
+
+    var lyricsAutoHide: Bool {
+        get { defaults.object(forKey: Key.lyricsAutoHide.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.lyricsAutoHide.rawValue) }
     }
 
     var selectedTheme: ThemeID {

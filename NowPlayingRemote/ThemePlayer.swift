@@ -28,6 +28,13 @@ enum ThemeID: String, CaseIterable {
         case .starry:    return "Starry Sky"
         }
     }
+
+    var supportsLyrics: Bool {
+        switch self {
+        case .clean, .starry, .bento, .vinyl, .vhs, .minimal: return true
+        default: return false
+        }
+    }
 }
 
 // MARK: - Entry points
@@ -139,6 +146,60 @@ private let seekBarJS = """
   },500);
 })();
 """
+
+// Shared lyrics helper JS. Provides _fetchLyrics, updateLyricsHighlight, toggleLyrics.
+// Themes must include lyricsVersion check in their onStateUpdate and call _getLyricsVer/_setLyricsVer.
+private func lyricsHelperJS(autoHide: Bool) -> String {
+    let ah = autoHide ? "true" : "false"
+    return """
+(function(){
+  var _ld=[],_lv=-1,_lt=null,_ah=\(ah);
+  function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+  function _show(v){
+    var p=document.getElementById('lyrics-panel');if(p)p.classList.toggle('open',v);
+    var b=document.getElementById('btn-lyrics');if(b)b.classList.toggle('on',v);
+    if(window._onLyricsToggle)window._onLyricsToggle(v);
+  }
+  function _status(msg){
+    _ld=[];var el=document.getElementById('lyric-lines');
+    if(el)el.innerHTML='<div class="lyric-status">'+msg+'</div>';
+    if(_ah)_show(false);
+  }
+  window._fetchLyrics=function(){
+    clearTimeout(_lt);
+    fetch('/api/lyrics').then(function(r){return r.json()}).then(function(data){
+      if(data.loading){_status('Loading lyrics…');_lt=setTimeout(window._fetchLyrics,25000);return}
+      var badge=document.getElementById('lyric-source');
+      if(!data.found||data.instrumental){
+        _status(data.instrumental?'♪ Instrumental':'No lyrics found');
+        if(badge)badge.textContent='';return;
+      }
+      _ld=(data.lines||[]).filter(function(l){return l.text&&l.text.trim()});
+      if(badge)badge.textContent=data.source==='local'?'Music':'LRCLib';
+      var el=document.getElementById('lyric-lines');
+      if(el)el.innerHTML=_ld.map(function(l,i){return '<div class="lyric-line" id="ly'+i+'" data-t="'+l.time+'" onclick="seekToLyric('+l.time+')">'+esc(l.text)+'</div>'}).join('');
+      if(_ah&&_ld.length)_show(true);
+    }).catch(function(){_status('Could not load lyrics')});
+  };
+  window.updateLyricsHighlight=function(e){
+    if(!_ld.length)return;
+    var active=-1;
+    for(var i=0;i<_ld.length;i++){if(_ld[i].time<0||_ld[i].time<=e)active=i;else break}
+    document.querySelectorAll('.lyric-line').forEach(function(el,i){
+      var was=el.classList.contains('active');
+      el.classList.toggle('active',i===active);
+      el.classList.toggle('near-active',Math.abs(i-active)<=1&&i!==active);
+      if(!was&&i===active)el.scrollIntoView({behavior:'smooth',block:'center'});
+    });
+  };
+  window.seekToLyric=function(t){if(t>=0)cmd('seek',t)};
+  window.toggleLyrics=function(){var p=document.getElementById('lyrics-panel');if(p)_show(!p.classList.contains('open'))};
+  window._getLyricsVer=function(){return _lv};
+  window._setLyricsVer=function(v){_lv=v};
+  setInterval(function(){var s=getState();if(s&&s.hasMedia)window.updateLyricsHighlight(elapsed())},300);
+})();
+"""
+}
 
 // MARK: - Clean (Default) ─────────────────────────────────────────────────────
 
@@ -644,16 +705,18 @@ window.onStateUpdate=function(s){
 // MARK: - Minimal ─────────────────────────────────────────────────────────────
 
 private func minimalHTML(_ settings: SettingsManager) -> String {
+    let showLyr = settings.showLyrics
     return """
 <!DOCTYPE html><html lang="en"><head>
 \(pwaHead(color: "#0e0e0e"))
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;background:#0e0e0e;color:#fff}
-.root{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:max(env(safe-area-inset-top),32px) clamp(32px,6vw,80px) max(env(safe-area-inset-bottom),32px);gap:0}
-#title{font-size:clamp(20px,4vw,40px);font-weight:600;letter-spacing:-.5px;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;width:100%;max-width:clamp(300px,65vw,680px);margin-bottom:8px;line-height:1.15}
-#artist{font-size:clamp(13px,2vw,20px);color:rgba(255,255,255,.4);font-weight:400;text-align:center;width:100%;max-width:clamp(300px,65vw,680px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-bottom:clamp(24px,4vh,48px)}
-.prog-wrap{width:100%;max-width:clamp(280px,60vw,620px);margin-bottom:clamp(24px,4vh,48px)}
+.root{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;\(showLyr ? "justify-content:flex-start;padding-top:max(env(safe-area-inset-top),32px)" : "justify-content:center");padding-left:clamp(32px,6vw,80px);padding-right:clamp(32px,6vw,80px);padding-bottom:max(env(safe-area-inset-bottom),\(showLyr ? "16px" : "32px"));}
+.player-top{display:flex;flex-direction:column;align-items:center;\(showLyr ? "padding-top:clamp(20px,4vh,48px)" : "")}
+#title{font-size:clamp(18px,3.5vw,36px);font-weight:600;letter-spacing:-.5px;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;width:100%;max-width:clamp(300px,65vw,680px);margin-bottom:8px;line-height:1.15}
+#artist{font-size:clamp(12px,1.8vw,18px);color:rgba(255,255,255,.4);font-weight:400;text-align:center;width:100%;max-width:clamp(300px,65vw,680px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-bottom:clamp(18px,3vh,36px)}
+.prog-wrap{width:100%;max-width:clamp(280px,60vw,620px);margin-bottom:clamp(18px,3vh,36px)}
 .prog-track{height:2px;background:rgba(255,255,255,.08);border-radius:1px;position:relative;cursor:pointer}
 .prog-fill{height:100%;background:rgba(255,255,255,.8);border-radius:1px;width:0%;transition:width .5s linear}
 .time-row{display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.25);font-variant-numeric:tabular-nums;margin-top:10px;letter-spacing:.3px}
@@ -662,26 +725,48 @@ button{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.7);dis
 button:active{transform:scale(.88);opacity:.4}
 .btn-play{width:48px;height:48px;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:50%}
 .btn-nav{width:36px;height:36px;opacity:.55}
+\(showLyr ? """
+.btn-lyr{width:30px;height:30px;border:1px solid rgba(255,255,255,.15);border-radius:50%;opacity:.5;font-size:14px}
+.btn-lyr.on{opacity:1;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.35)}
+/* Lyrics panel */
+#lyrics-panel{width:100%;max-width:clamp(300px,80vw,720px);margin:0 auto;flex:1;min-height:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transform:translateY(12px);transition:opacity .3s ease,transform .3s ease;margin-top:clamp(14px,2.5vh,28px)}
+#lyrics-panel.open{opacity:1;pointer-events:auto;transform:translateY(0)}
+.lyr-divider{height:1px;background:rgba(255,255,255,.07);width:100%;margin-bottom:clamp(12px,2vh,24px);flex-shrink:0}
+.lyr-scroll{flex:1;overflow-y:auto;scrollbar-width:none}
+.lyr-scroll::-webkit-scrollbar{display:none}
+.lyric-line{text-align:center;padding:8px 8px;font-size:clamp(13px,1.6vw,17px);font-weight:400;color:rgba(255,255,255,.22);line-height:1.6;border-radius:8px;transition:color .25s,font-size .25s;cursor:pointer}
+.lyric-line:empty::after{content:'♪'}
+.lyric-line.active{color:rgba(255,255,255,.88);font-weight:600;font-size:clamp(15px,1.9vw,19px)}
+.lyric-line.near-active{color:rgba(255,255,255,.42)}
+.lyric-status{text-align:center;padding:40px 0;color:rgba(255,255,255,.25);font-size:14px}
+""" : "")
 \(connDotCSS)
 </style></head><body>
 <div id="conn-dot" class="connecting"></div>
 <div class="root">
-  <div id="title">Nothing Playing</div>
-  <div id="artist"></div>
-  <div class="prog-wrap">
-    <div class="prog-track" id="prog-track">
-      <div class="prog-fill" id="prog-fill"></div>
+  <div class="player-top">
+    <div id="title">Nothing Playing</div>
+    <div id="artist"></div>
+    <div class="prog-wrap">
+      <div class="prog-track" id="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+      <div class="time-row"><span id="pb-e">0:00</span><span id="pb-r">0:00</span></div>
     </div>
-    <div class="time-row"><span id="pb-e">0:00</span><span id="pb-r">0:00</span></div>
+    <div class="controls">
+      <button class="btn-nav" onclick="cmd('previousTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+      <button class="btn-play" onclick="cmd('togglePlayPause')">
+        <svg id="ico-play" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M8 5v14l11-7z"/></svg>
+        <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+      </button>
+      <button class="btn-nav" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+      \(showLyr ? "<button class=\"btn-lyr\" id=\"btn-lyrics\" onclick=\"toggleLyrics()\">♪</button>" : "")
+    </div>
   </div>
-  <div class="controls">
-    <button class="btn-nav" onclick="cmd('previousTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
-    <button class="btn-play" onclick="cmd('togglePlayPause')">
-      <svg id="ico-play" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M8 5v14l11-7z"/></svg>
-      <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-    </button>
-    <button class="btn-nav" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+  \(showLyr ? """
+  <div id="lyrics-panel">
+    <div class="lyr-divider"></div>
+    <div class="lyr-scroll"><div id="lyric-lines"><div class="lyric-status">Play something to load lyrics</div></div></div>
   </div>
+  """ : "")
 </div>
 <script>
 let _pct=0,_dur=0;
@@ -692,27 +777,22 @@ window.onStateUpdate=function(s){
   document.getElementById('ico-play').style.display=pl?'none':'block';
   document.getElementById('ico-pause').style.display=pl?'block':'none';
   _dur=(s.durationMicros||0)/1e6;
+  \(showLyr ? "if(s.lyricsVersion!==undefined&&s.lyricsVersion!==window._getLyricsVer()){window._setLyricsVer(s.lyricsVersion);window._fetchLyrics();}" : "")
 };
 const track=document.getElementById('prog-track');
-let _seeking=false,_seekX=0;
 if(track){
-  const seek=e=>{
-    const r=track.getBoundingClientRect(),x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-    const pct=Math.max(0,Math.min(1,x/r.width));
-    document.getElementById('prog-fill').style.width=(pct*100)+'%';
-    if(_dur)cmd('seek',pct*_dur);
-  };
+  const seek=e=>{const r=track.getBoundingClientRect(),x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const pct=Math.max(0,Math.min(1,x/r.width));document.getElementById('prog-fill').style.width=(pct*100)+'%';if(_dur)cmd('seek',pct*_dur)};
   track.addEventListener('click',seek);
   track.addEventListener('touchend',e=>{e.preventDefault();seek(e.changedTouches[0]?{touches:[e.changedTouches[0]]}:e)},{passive:false});
 }
 setInterval(()=>{
   const s=getState();if(!s.hasMedia)return;
-  const e=elapsed(),d=_dur||0;
-  const pct=d>0?Math.min(e/d,1):0;
+  const e=elapsed(),d=_dur||0;const pct=d>0?Math.min(e/d,1):0;
   document.getElementById('prog-fill').style.width=(pct*100)+'%';
   const eEl=document.getElementById('pb-e'),rEl=document.getElementById('pb-r');
   if(eEl)eEl.textContent=fmt(e);if(rEl)rEl.textContent='-'+fmt(Math.max(0,d-e));
 },500);
+\(showLyr ? lyricsHelperJS(autoHide: settings.lyricsAutoHide) : "")
 \(coreJS)
 </script></body></html>
 """
@@ -721,13 +801,26 @@ setInterval(()=>{
 // MARK: - Vinyl ───────────────────────────────────────────────────────────────
 
 private func vinylHTML(_ settings: SettingsManager) -> String {
+    let showLyr = settings.showLyrics
     return """
 <!DOCTYPE html><html lang="en"><head>
 \(pwaHead(color: "#0d0d0d"))
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;background:#0d0d0d;color:#fff}
-.root{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:max(env(safe-area-inset-top),20px) 24px max(env(safe-area-inset-bottom),20px);gap:0}
+.root{position:fixed;inset:0;display:flex;\(showLyr ? "flex-direction:row;align-items:stretch" : "flex-direction:column;align-items:center;justify-content:center");padding:max(env(safe-area-inset-top),20px) 24px max(env(safe-area-inset-bottom),20px);gap:0}
+\(showLyr ? """
+/* Wide layout: vinyl on left, lyrics float right */
+.vinyl-col{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;padding-right:clamp(16px,3vw,40px)}
+.lyrics-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden;opacity:0;pointer-events:none;transform:translateX(16px);transition:opacity .35s ease,transform .35s ease}
+.lyrics-col.open{opacity:1;pointer-events:auto;transform:translateX(0)}
+/* On small screens (<640px wide), fallback to column layout */
+@media(max-width:640px){
+  .root{flex-direction:column;align-items:center;justify-content:center}
+  .vinyl-col{padding-right:0}
+  .lyrics-col{flex:none;width:100%;max-height:45vh;margin-top:16px}
+}
+""" : "")
 /* Platter shadow */
 .platter{position:relative;margin-bottom:28px;flex-shrink:0}
 .platter::after{content:'';position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);width:88%;height:24px;background:radial-gradient(ellipse,rgba(0,0,0,.6) 0%,transparent 70%);border-radius:50%;filter:blur(6px)}
@@ -745,11 +838,11 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 /* Grooves overlay */
 #disc::before{content:'';position:absolute;inset:0;background:repeating-radial-gradient(circle at 50%,transparent 0px,transparent 5px,rgba(0,0,0,.12) 5.5px,rgba(0,0,0,.12) 6px);border-radius:50%;pointer-events:none;z-index:1}
 /* Info */
-.info{text-align:center;margin-bottom:18px;width:100%;max-width:clamp(300px,60vw,540px)}
+.info{text-align:center;margin-bottom:18px;width:100%;\(showLyr ? "" : "max-width:clamp(300px,60vw,540px)")}
 #title{font-size:clamp(16px,3vw,28px);font-weight:600;letter-spacing:-.2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
 #artist{font-size:clamp(13px,1.8vw,18px);color:rgba(255,255,255,.45);margin-top:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 /* Progress */
-.prog-wrap{width:100%;max-width:clamp(280px,55vw,500px);margin-bottom:14px}
+.prog-wrap{width:100%;\(showLyr ? "" : "max-width:clamp(280px,55vw,500px);")margin-bottom:14px}
 \(rangeCSSWhite)
 .time-row{display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.3);font-variant-numeric:tabular-nums;margin-top:2px}
 /* Controls */
@@ -758,11 +851,26 @@ button{background:none;border:none;cursor:pointer;color:#fff;border-radius:50%;d
 button:active{transform:scale(.88);opacity:.6}
 .btn-play{width:64px;height:64px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12)}
 .btn-nav{width:46px;height:46px;opacity:.75}
+\(showLyr ? """
+.btn-lyr{padding:0 12px;height:28px;border:1px solid rgba(255,255,255,.15);border-radius:14px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);letter-spacing:.3px;margin-left:8px}
+.btn-lyr.on{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.9)}
+/* Lyrics floating column */
+.lyric-line{text-align:left;padding:9px 0;font-size:clamp(14px,1.5vw,18px);font-weight:400;color:rgba(255,255,255,.22);line-height:1.55;transition:color .25s;cursor:pointer;border-bottom:none}
+.lyric-line:empty::after{content:'♪'}
+.lyric-line.active{color:rgba(255,255,255,.92);font-weight:600}
+.lyric-line.near-active{color:rgba(255,255,255,.45)}
+.lyric-status{padding:40px 0;color:rgba(255,255,255,.28);font-size:14px}
+.lyr-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:16px}
+.lyr-scroll{flex:1;overflow-y:auto;scrollbar-width:none}
+.lyr-scroll::-webkit-scrollbar{display:none}
+#lyrics-panel{display:flex;flex-direction:column;height:100%}
+""" : "")
 \(connDotCSS)
 @media(max-height:580px){#disc{width:clamp(150px,45vh,220px);height:clamp(150px,45vh,220px)}}
 </style></head><body>
 <div id="conn-dot" class="connecting"></div>
 <div class="root" id="root">
+  \(showLyr ? "<div class=\"vinyl-col\">" : "")
   <div class="platter">
     <div id="disc">
       <img id="art" alt="">
@@ -782,7 +890,9 @@ button:active{transform:scale(.88);opacity:.6}
       <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
     </button>
     <button class="btn-nav" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+    \(showLyr ? "<button class=\"btn-lyr\" id=\"btn-lyrics\" onclick=\"toggleLyrics()\">Lyrics</button>" : "")
   </div>
+  \(showLyr ? "</div><div class=\"lyrics-col\" id=\"lyrics-panel\"><div class=\"lyr-label\">Lyrics<span id=\"lyric-source\" style=\"margin-left:8px;font-size:9px;opacity:.6\"></span></div><div class=\"lyr-scroll\"><div id=\"lyric-lines\"><div class=\"lyric-status\">Play something to load lyrics</div></div></div></div>" : "")
 </div>
 <script>
 let _av=-1;
@@ -797,8 +907,10 @@ window.onStateUpdate=function(s){
     _av=s.artworkVersion;
     loadArt(img=>{document.getElementById('art').src=img.src;document.getElementById('art').style.display='block';document.getElementById('art-ph').style.display='none'});
   } else if(!s.hasArtwork){_av=-1;document.getElementById('art').style.display='none';document.getElementById('art-ph').style.display='flex'}
+  \(showLyr ? "if(s.lyricsVersion!==undefined&&s.lyricsVersion!==window._getLyricsVer()){window._setLyricsVer(s.lyricsVersion);window._fetchLyrics();}" : "")
 };
 \(seekBarJS)
+\(showLyr ? lyricsHelperJS(autoHide: settings.lyricsAutoHide) : "")
 \(coreJS)
 </script></body></html>
 """
@@ -901,6 +1013,7 @@ window.onStateUpdate=function(s){
 // MARK: - VHS ─────────────────────────────────────────────────────────────────
 
 private func vhsHTML(_ settings: SettingsManager) -> String {
+    let showLyr = settings.showLyrics
     return """
 <!DOCTYPE html><html lang="en"><head>
 \(pwaHead(color: "#050a05"))
@@ -939,6 +1052,21 @@ button:active{opacity:.5;background:rgba(51,255,85,.1)}
 .btn-nav{width:40px;height:36px;font-size:9px;letter-spacing:1px}
 /* Timestamp */
 #vhs-time{font-size:12px;font-weight:700;letter-spacing:1px}
+\(showLyr ? """
+/* Lyrics section */
+.lyr-section{margin-top:20px;flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid rgba(51,255,85,.12);padding-top:12px;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .3s ease,transform .3s ease}
+.lyr-section.open{opacity:1;pointer-events:auto;transform:translateY(0)}
+.lyr-hdr{font-size:9px;letter-spacing:2px;color:rgba(51,255,85,.35);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.lyr-scroll{flex:1;overflow-y:auto;scrollbar-width:none}
+.lyr-scroll::-webkit-scrollbar{display:none}
+.lyric-line{padding:6px 0;font-size:clamp(12px,1.4vw,16px);color:rgba(51,255,85,.22);line-height:1.45;cursor:pointer;transition:color .2s;border-bottom:none;letter-spacing:.5px}
+.lyric-line:empty::after{content:'~ ~ ~'}
+.lyric-line.active{color:#33ff55;text-shadow:0 0 12px rgba(51,255,85,.5)}
+.lyric-line.near-active{color:rgba(51,255,85,.45)}
+.lyric-status{padding:24px 0;color:rgba(51,255,85,.25);font-size:12px;letter-spacing:1px}
+""" : "")
+/* Btn-lyrics style */
+\(showLyr ? ".btn-lyr{font-size:9px;letter-spacing:1px;border:1px solid rgba(51,255,85,.25);border-radius:2px;padding:0 8px;height:26px;color:rgba(51,255,85,.55);background:none;cursor:pointer;font-family:inherit}.btn-lyr.on{color:#33ff55;background:rgba(51,255,85,.08);border-color:#33ff55}" : "")
 /* Conn dot override */
 \(connDotCSS.replacingOccurrences(of: "#f44", with: "#ff0055").replacingOccurrences(of: "#4f4", with: "#33ff55").replacingOccurrences(of: "#fa4", with: "#ffaa00"))
 #conn-dot{width:6px;height:6px;top:max(env(safe-area-inset-top,0px),10px)}
@@ -962,7 +1090,14 @@ button:active{opacity:.5;background:rgba(51,255,85,.1)}
     <button class="btn-nav" onclick="cmd('previousTrack')">◀◀</button>
     <button class="btn-play" onclick="cmd('togglePlayPause')" id="btn-pp">▶ PLAY</button>
     <button class="btn-nav" onclick="cmd('nextTrack')">▶▶</button>
+    \(showLyr ? "<button class=\"btn-lyr\" id=\"btn-lyrics\" onclick=\"toggleLyrics()\">LYRICS</button>" : "")
   </div>
+  \(showLyr ? """
+  <div class="lyr-section" id="lyrics-panel">
+    <div class="lyr-hdr"><span>LYRICS<span id="lyric-source" style="margin-left:8px;opacity:.5"></span></span></div>
+    <div class="lyr-scroll"><div id="lyric-lines"><div class="lyric-status">PLAY SOMETHING TO LOAD LYRICS</div></div></div>
+  </div>
+  """ : "")
 </div>
 <script>
 let _dur=0;
@@ -973,24 +1108,23 @@ window.onStateUpdate=function(s){
   document.getElementById('btn-pp').textContent=pl?'▮▮ PAUSE':'▶ PLAY';
   document.getElementById('vhs-ch').textContent=pl?'▶ CH 01':'■ CH 01';
   _dur=(s.durationMicros||0)/1e6;
+  \(showLyr ? "if(s.lyricsVersion!==undefined&&s.lyricsVersion!==window._getLyricsVer()){window._setLyricsVer(s.lyricsVersion);window._fetchLyrics();}" : "")
 };
 const track=document.getElementById('prog-track');
 if(track)track.addEventListener('click',e=>{const r=track.getBoundingClientRect();const p=(e.clientX-r.left)/r.width;if(_dur)cmd('seek',Math.max(0,Math.min(1,p))*_dur)});
-// Clock
 setInterval(()=>{
   const now=new Date();
   document.getElementById('vhs-time').textContent=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
 },1000);
-// Progress
 setInterval(()=>{
   const s=getState();if(!s.hasMedia)return;
-  const e=elapsed(),d=_dur||0;
-  const p=d>0?Math.min(e/d,1):0;
+  const e=elapsed(),d=_dur||0;const p=d>0?Math.min(e/d,1):0;
   document.getElementById('prog-fill').style.width=(p*100)+'%';
   const eEl=document.getElementById('pb-e'),rEl=document.getElementById('pb-r');
   const f=t=>{const s=Math.floor(t),m=Math.floor(s/60);return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
   if(eEl)eEl.textContent=f(e);if(rEl)rEl.textContent=f(Math.max(0,d-e));
 },500);
+\(showLyr ? lyricsHelperJS(autoHide: settings.lyricsAutoHide) : "")
 \(coreJS)
 </script></body></html>
 """
@@ -1099,43 +1233,60 @@ setInterval(()=>{
 // MARK: - Bento ───────────────────────────────────────────────────────────────
 
 private func bentoHTML(_ settings: SettingsManager) -> String {
+    let showLyr = settings.showLyrics
     return """
 <!DOCTYPE html><html lang="en"><head>
 \(pwaHead(color: "#111118"))
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;background:#111118;color:#fff}
-.root{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+.root{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;\(showLyr ? "gap:clamp(8px,1.2vw,14px);" : "")
   padding:max(env(safe-area-inset-top),16px) clamp(16px,3vw,40px) max(env(safe-area-inset-bottom),16px)}
-/* Grid — max-width grows with viewport, art row height is unconstrained up to 1:1 ratio */
 .grid{
   display:grid;
   width:100%;
-  max-width:clamp(340px,80vw,700px);
+  max-width:clamp(340px,\(showLyr ? "46vw" : "80vw"),\(showLyr ? "480px" : "700px"));
   grid-template-columns:1fr 1fr;
   grid-template-rows:auto auto auto;
   gap:clamp(8px,1.2vw,14px)}
 .card{background:rgba(255,255,255,.06);border-radius:clamp(14px,2vw,22px);border:1px solid rgba(255,255,255,.07);padding:clamp(12px,1.8vw,20px);overflow:hidden}
-/* Art card */
 .art-card{grid-column:1;grid-row:1;padding:0;aspect-ratio:1;overflow:hidden;border-radius:clamp(14px,2vw,22px)}
 #art{width:100%;height:100%;object-fit:cover;display:none;border-radius:inherit}
 #art-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:clamp(40px,6vw,80px);background:rgba(255,255,255,.04)}
-/* Info card */
 .info-card{grid-column:2;grid-row:1;display:flex;flex-direction:column;justify-content:center;gap:4px}
 #title{font-size:clamp(14px,2.2vw,24px);font-weight:700;letter-spacing:-.3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;line-height:1.25}
 #artist{font-size:clamp(11px,1.5vw,16px);color:rgba(255,255,255,.5);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:4px}
 #album{font-size:clamp(10px,1.2vw,13px);color:rgba(255,255,255,.3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-/* Progress card */
 .prog-card{grid-column:1 / -1;grid-row:2;padding:clamp(10px,1.5vw,16px) clamp(12px,2vw,20px) clamp(8px,1.2vw,14px)}
 \(rangeCSSWhite)
 .time-row{display:flex;justify-content:space-between;font-size:clamp(9px,1.1vw,12px);color:rgba(255,255,255,.3);font-variant-numeric:tabular-nums;margin-top:4px}
-/* Controls card */
 .ctrl-card{grid-column:1 / -1;grid-row:3;display:flex;align-items:center;justify-content:space-around;padding:clamp(10px,1.5vw,16px)}
 button{background:none;border:none;cursor:pointer;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .12s,opacity .12s,background .12s;padding:0}
 button:active{transform:scale(.88);opacity:.6}
 .btn-play{width:clamp(52px,6vw,72px);height:clamp(52px,6vw,72px);background:rgba(255,255,255,.14)}
 .btn-play:hover{background:rgba(255,255,255,.2)}
 .btn-nav{width:clamp(38px,4.5vw,56px);height:clamp(38px,4.5vw,56px);opacity:.8}
+\(showLyr ? """
+.btn-lyr{padding:0 10px;height:26px;border:1px solid rgba(255,255,255,.15);border-radius:13px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);letter-spacing:.3px;border-radius:13px}
+.btn-lyr.on{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.9)}
+/* Lyrics card — right column, same height as the grid */
+#lyrics-panel{flex:0 0 clamp(200px,36vw,360px);background:rgba(255,255,255,.06);border-radius:clamp(14px,2vw,22px);border:1px solid rgba(255,255,255,.07);padding:clamp(12px,1.8vw,20px);display:flex;flex-direction:column;align-self:stretch;opacity:0;pointer-events:none;transform:translateX(12px);transition:opacity .3s ease,transform .3s ease}
+#lyrics-panel.open{opacity:1;pointer-events:auto;transform:translateX(0)}
+.lyr-hdr{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.lyr-scroll{flex:1;overflow-y:auto;scrollbar-width:none}
+.lyr-scroll::-webkit-scrollbar{display:none}
+.lyric-line{padding:8px 4px;font-size:clamp(12px,1.3vw,15px);font-weight:400;color:rgba(255,255,255,.22);line-height:1.6;cursor:pointer;transition:color .22s,font-size .22s;border-bottom:1px solid rgba(255,255,255,.04)}
+.lyric-line:last-child{border-bottom:none}
+.lyric-line:empty::after{content:'♪'}
+.lyric-line.active{color:rgba(255,255,255,.92);font-weight:600;font-size:clamp(13px,1.5vw,17px)}
+.lyric-line.near-active{color:rgba(255,255,255,.45)}
+.lyric-status{padding:32px 0;text-align:center;color:rgba(255,255,255,.25);font-size:13px}
+@media(max-width:640px){
+  .root{flex-direction:column}
+  #lyrics-panel{flex:0 0 auto;width:100%;max-height:40vh;transform:translateY(12px)}
+  #lyrics-panel.open{transform:translateY(0)}
+}
+""" : "")
 \(connDotCSS)
 @media(max-height:560px){.art-card{aspect-ratio:unset;height:clamp(100px,30vh,160px)}}
 </style></head><body>
@@ -1159,8 +1310,15 @@ button:active{transform:scale(.88);opacity:.6}
         <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="30" height="30" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
       </button>
       <button class="btn-nav" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+      \(showLyr ? "<button class=\"btn-lyr\" id=\"btn-lyrics\" onclick=\"toggleLyrics()\">Lyrics</button>" : "")
     </div>
   </div>
+  \(showLyr ? """
+  <div id="lyrics-panel">
+    <div class="lyr-hdr">Lyrics<span id="lyric-source" style="opacity:.6;font-size:9px"></span></div>
+    <div class="lyr-scroll"><div id="lyric-lines"><div class="lyric-status">Play something to load lyrics</div></div></div>
+  </div>
+  """ : "")
 </div>
 <script>
 let _av=-1;
@@ -1175,8 +1333,10 @@ window.onStateUpdate=function(s){
     _av=s.artworkVersion;
     loadArt(img=>{document.getElementById('art').src=img.src;document.getElementById('art').style.display='block';document.getElementById('art-ph').style.display='none'});
   } else if(!s.hasArtwork){_av=-1;document.getElementById('art').style.display='none';document.getElementById('art-ph').style.display='flex'}
+  \(showLyr ? "if(s.lyricsVersion!==undefined&&s.lyricsVersion!==window._getLyricsVer()){window._setLyricsVer(s.lyricsVersion);window._fetchLyrics();}" : "")
 };
 \(seekBarJS)
+\(showLyr ? lyricsHelperJS(autoHide: settings.lyricsAutoHide) : "")
 \(coreJS)
 </script></body></html>
 """
@@ -1185,57 +1345,71 @@ window.onStateUpdate=function(s){
 // MARK: - Starry Sky ──────────────────────────────────────────────────────────
 
 private func starryHTML(_ settings: SettingsManager) -> String {
+    let showLyr = settings.showLyrics
     return """
 <!DOCTYPE html><html lang="en"><head>
-\(pwaHead(color: "#08041a"))
+\(pwaHead(color: "#000"))
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;background:#08041a;color:#fff}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;background:#000;color:#fff}
 canvas#stars{position:fixed;inset:0;z-index:0}
-/* Aurora curtains — three blobs, shift slowly */
 .aur{position:fixed;z-index:1;pointer-events:none;border-radius:50%;filter:blur(70px);mix-blend-mode:screen}
-.aur1{width:80vw;height:50vh;top:-15vh;left:-10vw;background:radial-gradient(ellipse,rgba(40,200,160,.45),transparent 70%);animation:_a1 14s ease-in-out infinite alternate}
-.aur2{width:70vw;height:45vh;top:-10vh;right:-5vw;background:radial-gradient(ellipse,rgba(100,60,220,.4),transparent 70%);animation:_a2 18s ease-in-out infinite alternate}
-.aur3{width:60vw;height:40vh;top:5vh;left:20vw;background:radial-gradient(ellipse,rgba(0,180,220,.3),transparent 70%);animation:_a3 22s ease-in-out infinite alternate}
+.aur1{width:80vw;height:50vh;top:-15vh;left:-10vw;background:radial-gradient(ellipse,rgba(220,220,235,.06),transparent 70%);animation:_a1 14s ease-in-out infinite alternate}
+.aur2{width:70vw;height:45vh;top:-10vh;right:-5vw;background:radial-gradient(ellipse,rgba(200,200,220,.05),transparent 70%);animation:_a2 18s ease-in-out infinite alternate}
+.aur3{width:60vw;height:40vh;top:5vh;left:20vw;background:radial-gradient(ellipse,rgba(210,210,230,.04),transparent 70%);animation:_a3 22s ease-in-out infinite alternate}
 @keyframes _a1{0%{transform:translateX(0) scaleY(1)}100%{transform:translateX(8vw) scaleY(1.2)}}
 @keyframes _a2{0%{transform:translateX(0) scaleY(1)}100%{transform:translateX(-6vw) scaleY(.9)}}
 @keyframes _a3{0%{transform:translateX(0) scaleY(1)}100%{transform:translateX(5vw) scaleY(1.15)}}
-/* Floating layout — no card */
-.root{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:max(env(safe-area-inset-top),28px) clamp(28px,6vw,80px) max(env(safe-area-inset-bottom),28px);gap:0}
-/* Art floats large — drop shadow only, no border/background */
-#art-wrap{
-  width:clamp(180px,min(46vw,46vh),380px);
-  height:clamp(180px,min(46vw,46vh),380px);
-  border-radius:clamp(16px,2.5vw,28px);overflow:hidden;flex-shrink:0;
-  margin-bottom:clamp(20px,3vh,36px);
-  box-shadow:0 24px 80px rgba(20,0,60,.8),0 4px 20px rgba(80,40,180,.4),0 0 0 1px rgba(160,100,255,.12);
-  transition:transform .4s cubic-bezier(.4,0,.2,1)}
+/* Floating layout */
+#float-root{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:max(env(safe-area-inset-top),28px) clamp(28px,6vw,80px) max(env(safe-area-inset-bottom),28px);gap:0;
+  transition:opacity .35s ease}
+#art-wrap{width:clamp(180px,min(46vw,46vh),380px);height:clamp(180px,min(46vw,46vh),380px);border-radius:clamp(16px,2.5vw,28px);overflow:hidden;flex-shrink:0;margin-bottom:clamp(20px,3vh,36px);box-shadow:0 24px 80px rgba(0,0,0,.9),0 8px 32px rgba(0,0,0,.6);transition:transform .4s cubic-bezier(.4,0,.2,1)}
 #art-wrap.playing{transform:scale(1.02)}
 #art{width:100%;height:100%;object-fit:cover;display:none}
-#art-ph{width:100%;height:100%;background:rgba(80,40,160,.25);display:flex;align-items:center;justify-content:center;font-size:clamp(52px,8vw,100px)}
-/* Text floats with subtle glow */
+#art-ph{width:100%;height:100%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:clamp(52px,8vw,100px)}
 .info{text-align:center;width:100%;max-width:clamp(300px,70vw,680px);margin-bottom:clamp(14px,2.5vh,28px)}
-#title{
-  font-size:clamp(20px,3.5vw,40px);font-weight:700;letter-spacing:-.4px;line-height:1.15;
-  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  text-shadow:0 0 40px rgba(160,100,255,.5),0 2px 12px rgba(0,0,0,.6)}
-#artist{font-size:clamp(13px,1.8vw,20px);color:rgba(180,140,255,.65);margin-top:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;letter-spacing:.2px}
-/* Progress */
+#title{font-size:clamp(20px,3.5vw,40px);font-weight:700;letter-spacing:-.4px;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+#artist{font-size:clamp(13px,1.8vw,20px);color:rgba(200,200,200,.65);margin-top:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;letter-spacing:.2px}
 .prog-wrap{width:100%;max-width:clamp(280px,60vw,560px);margin-bottom:clamp(14px,2vh,24px)}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;outline:none;--fill:0%}
-input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(to right,rgba(160,100,255,.9) var(--fill),rgba(255,255,255,.12) var(--fill))}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:rgba(200,160,255,1);cursor:pointer;margin-top:-5.5px;box-shadow:0 0 10px rgba(160,80,255,.7)}
-.time-row{display:flex;justify-content:space-between;font-size:11px;color:rgba(180,140,255,.38);font-variant-numeric:tabular-nums;margin-top:4px}
-/* Controls */
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(to right,rgba(255,255,255,.85) var(--fill),rgba(255,255,255,.15) var(--fill))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;cursor:pointer;margin-top:-5.5px;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.time-row{display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.35);font-variant-numeric:tabular-nums;margin-top:4px}
 .controls{display:flex;align-items:center;gap:clamp(10px,2vw,24px)}
 button{background:none;border:none;cursor:pointer;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .12s,opacity .12s;padding:0}
 button:active{transform:scale(.88);opacity:.6}
-.btn-play{
-  width:clamp(58px,7vw,80px);height:clamp(58px,7vw,80px);
-  background:rgba(120,60,220,.3);border:1px solid rgba(160,100,255,.35);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.btn-play{width:clamp(58px,7vw,80px);height:clamp(58px,7vw,80px)}
 .btn-nav{width:clamp(40px,5vw,58px);height:clamp(40px,5vw,58px);opacity:.8}
+\(showLyr ? """
+/* Lyrics toggle button in floating root */
+.btn-lyr{padding:0 14px;height:32px;border:1px solid rgba(255,255,255,.2);border-radius:16px;font-size:12px;font-weight:600;color:rgba(255,255,255,.65);letter-spacing:.3px;margin-top:clamp(10px,2vh,20px)}
+.btn-lyr.on{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.4);color:#fff}
+/* Lyrics panel — full screen, slides up */
+#lyrics-panel{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .4s cubic-bezier(.4,0,.2,1)}
+#lyrics-panel.open{transform:translateY(0)}
+/* Lyrics scroll area */
+.lyr-scroll{flex:1;overflow-y:auto;padding:max(env(safe-area-inset-top),32px) clamp(20px,4vw,60px) 16px;scrollbar-width:none}
+.lyr-scroll::-webkit-scrollbar{display:none}
+.lyric-line{text-align:center;padding:10px 16px;font-size:16px;font-weight:500;color:rgba(255,255,255,.26);line-height:1.65;border-radius:10px;transition:color .25s,font-size .25s;cursor:pointer}
+.lyric-line:empty::after{content:'♪'}
+.lyric-line.active{color:rgba(255,255,255,.95);font-size:20px;font-weight:700}
+.lyric-line.near-active{color:rgba(255,255,255,.5)}
+.lyric-line:not(.active):hover{color:rgba(255,255,255,.45)}
+.lyric-status{text-align:center;padding:64px 24px;color:rgba(255,255,255,.3);font-size:15px}
+/* Mini now-playing bar at bottom of lyrics panel */
+.now-bar{display:flex;align-items:center;gap:12px;padding:12px 16px max(env(safe-area-inset-bottom),16px);background:rgba(0,0,0,.55);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.nb-art-wrap{width:46px;height:46px;border-radius:8px;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,.08)}
+#nb-art{width:100%;height:100%;object-fit:cover;display:none}
+.nb-info{flex:1;min-width:0}
+#nb-title{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nb-artist{font-size:11px;color:rgba(200,200,200,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.nb-ctrls{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.nb-btn{width:34px;height:34px;border-radius:50%;color:#fff;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.nb-btn:active{transform:scale(.88);opacity:.6}
+#btn-lyrics{padding:0 12px;height:28px;border:1px solid rgba(255,255,255,.2);border-radius:14px;font-size:11px;font-weight:600;color:rgba(255,255,255,.6);letter-spacing:.3px;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#btn-lyrics.on{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.4);color:#fff}
+""" : "")
 \(connDotCSS)
 @media(max-height:560px){
   #art-wrap{width:clamp(110px,38vh,180px);height:clamp(110px,38vh,180px);margin-bottom:12px}
@@ -1246,7 +1420,22 @@ button:active{transform:scale(.88);opacity:.6}
 <canvas id="stars"></canvas>
 <div class="aur aur1"></div><div class="aur aur2"></div><div class="aur aur3"></div>
 <div id="conn-dot" class="connecting"></div>
-<div class="root">
+\(showLyr ? """
+<div id="lyrics-panel">
+  <div class="lyr-scroll"><div id="lyric-lines"><div class="lyric-status">Play something to load lyrics</div></div></div>
+  <div class="now-bar">
+    <div class="nb-art-wrap"><img id="nb-art" alt=""><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:20px" id="nb-ph">✦</div></div>
+    <div class="nb-info"><div id="nb-title">Nothing Playing</div><div id="nb-artist"></div></div>
+    <div class="nb-ctrls">
+      <button class="nb-btn" onclick="cmd('previousTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+      <button class="nb-btn" id="nb-pp" onclick="cmd('togglePlayPause')"><svg id="nb-ico-play" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M8 5v14l11-7z"/></svg><svg id="nb-ico-pause" viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+      <button class="nb-btn" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+      <button id="btn-lyrics" onclick="toggleLyrics()">Lyrics</button>
+    </div>
+  </div>
+</div>
+""" : "")
+<div id="float-root">
   <div id="art-wrap"><img id="art" alt=""><div id="art-ph">✦</div></div>
   <div class="info"><div id="title">Nothing Playing</div><div id="artist"></div></div>
   <div class="prog-wrap">
@@ -1260,38 +1449,26 @@ button:active{transform:scale(.88);opacity:.6}
       <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="30" height="30" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
     </button>
     <button class="btn-nav" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+    \(showLyr ? "<button class=\"btn-lyr\" id=\"btn-lyr-float\" onclick=\"toggleLyrics()\">Lyrics</button>" : "")
   </div>
 </div>
 <script>
 (function(){
   const cvs=document.getElementById('stars'),ctx=cvs.getContext('2d');
   let W,H,stars=[],shoots=[];
-  function resize(){
-    W=cvs.width=window.innerWidth;H=cvs.height=window.innerHeight;
-    stars=[];
-    const n=Math.round(W*H/5000);
-    for(let i=0;i<n;i++)stars.push({x:Math.random(),y:Math.random(),r:.4+Math.random()*1.3,a:.25+Math.random()*.75,tw:1.5+Math.random()*4,tp:Math.random()*Math.PI*2});
-  }
+  function resize(){W=cvs.width=window.innerWidth;H=cvs.height=window.innerHeight;stars=[];const n=Math.round(W*H/5000);for(let i=0;i<n;i++)stars.push({x:Math.random(),y:Math.random(),r:.4+Math.random()*1.3,a:.25+Math.random()*.75,tw:1.5+Math.random()*4,tp:Math.random()*Math.PI*2})}
   resize();window.addEventListener('resize',resize);
   function newShoot(){return{x:Math.random()*.75,y:Math.random()*.45,len:100+Math.random()*160,angle:Math.PI/5+Math.random()*.35,speed:7+Math.random()*7,life:1,decay:.015+Math.random()*.01}}
   let nextShoot=1+Math.random()*4;
   function draw(ts){
-    ctx.clearRect(0,0,W,H);
-    const t=ts/1000;
-    ctx.save();
+    ctx.clearRect(0,0,W,H);const t=ts/1000;ctx.save();
     for(const s of stars){const a=s.a*(.65+.35*Math.sin(t/s.tw+s.tp));ctx.globalAlpha=a;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill()}
-    ctx.restore();
-    nextShoot-=1/60;
-    if(nextShoot<=0){shoots.push(newShoot());nextShoot=2+Math.random()*5}
+    ctx.restore();nextShoot-=1/60;if(nextShoot<=0){shoots.push(newShoot());nextShoot=2+Math.random()*5}
     for(let i=shoots.length-1;i>=0;i--){
-      const sh=shoots[i];
-      const x1=sh.x*W,y1=sh.y*H,x2=x1+Math.cos(sh.angle)*sh.len,y2=y1+Math.sin(sh.angle)*sh.len;
-      const g=ctx.createLinearGradient(x1,y1,x2,y2);
-      g.addColorStop(0,`rgba(200,180,255,${sh.life})`);g.addColorStop(1,'rgba(200,180,255,0)');
-      ctx.save();ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.globalAlpha=sh.life;
-      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore();
-      sh.x+=Math.cos(sh.angle)*sh.speed/W;sh.y+=Math.sin(sh.angle)*sh.speed/H;sh.life-=sh.decay;
-      if(sh.life<=0)shoots.splice(i,1);
+      const sh=shoots[i];const x1=sh.x*W,y1=sh.y*H,x2=x1+Math.cos(sh.angle)*sh.len,y2=y1+Math.sin(sh.angle)*sh.len;
+      const g=ctx.createLinearGradient(x1,y1,x2,y2);g.addColorStop(0,`rgba(255,255,255,${sh.life})`);g.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.save();ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.globalAlpha=sh.life;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore();
+      sh.x+=Math.cos(sh.angle)*sh.speed/W;sh.y+=Math.sin(sh.angle)*sh.speed/H;sh.life-=sh.decay;if(sh.life<=0)shoots.splice(i,1);
     }
     requestAnimationFrame(draw);
   }
@@ -1307,10 +1484,29 @@ window.onStateUpdate=function(s){
   document.getElementById('art-wrap').classList.toggle('playing',pl&&s.hasMedia);
   if(s.hasArtwork&&s.artworkVersion!==_av){
     _av=s.artworkVersion;
-    loadArt(img=>{document.getElementById('art').src=img.src;document.getElementById('art').style.display='block';document.getElementById('art-ph').style.display='none'});
+    loadArt(img=>{
+      document.getElementById('art').src=img.src;document.getElementById('art').style.display='block';document.getElementById('art-ph').style.display='none';
+      const nbArt=document.getElementById('nb-art');
+      if(nbArt){nbArt.src=img.src;nbArt.style.display='block';const ph=document.getElementById('nb-ph');if(ph)ph.style.display='none';}
+    });
   } else if(!s.hasArtwork){_av=-1;document.getElementById('art').style.display='none';document.getElementById('art-ph').style.display='flex'}
+  \(showLyr ? """
+  const nbT=document.getElementById('nb-title');if(nbT)nbT.textContent=s.hasMedia?(s.title||'Unknown'):'Nothing Playing';
+  const nbA=document.getElementById('nb-artist');if(nbA)nbA.textContent=s.hasMedia?(s.artist||''):'';
+  const nbPl=document.getElementById('nb-ico-play'),nbPa=document.getElementById('nb-ico-pause');
+  if(nbPl)nbPl.style.display=pl?'none':'block';if(nbPa)nbPa.style.display=pl?'block':'none';
+  if(s.lyricsVersion!==undefined&&s.lyricsVersion!==window._getLyricsVer()){window._setLyricsVer(s.lyricsVersion);window._fetchLyrics();}
+  """ : "")
 };
+\(showLyr ? """
+window._onLyricsToggle=function(open){
+  const fr=document.getElementById('float-root');
+  if(fr){fr.style.opacity=open?'0':'1';fr.style.pointerEvents=open?'none':''}
+  const fb=document.getElementById('btn-lyr-float');if(fb)fb.classList.toggle('on',open);
+};
+""" : "")
 \(seekBarJS)
+\(showLyr ? lyricsHelperJS(autoHide: settings.lyricsAutoHide) : "")
 \(coreJS)
 </script></body></html>
 """
