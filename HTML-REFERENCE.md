@@ -220,3 +220,59 @@ Use `env(safe-area-inset-*)` with `padding` or `max()` to keep content clear of 
 ```
 
 Use `position: fixed; inset: 0` on your root container (rather than `height: 100dvh`) to avoid the black bar at the bottom in iOS standalone mode.
+
+---
+
+## Themes
+
+Now Playing Remote ships with 10 built-in themes selectable from Settings → Custom Player → Theme:
+
+| Theme | Description |
+|---|---|
+| **Clean (Default)** | Blurred art background with canvas colour extraction, full lyrics panel |
+| **Immersive** | Full-screen blurred art fill, content floats centred on top |
+| **Poster** | Giant title, small art square, print-design monochrome palette |
+| **Minimal** | No artwork, just title, artist, a thin progress line, and three control dots |
+| **Vinyl** | Spinning disc art, dark platter shadow, pauses when playback stops |
+| **Cassette** | Skeuomorphic cassette shell with animated reels and warm beige palette |
+| **VHS / Late-night** | Scanlines, CSS glitch animation on title, clock timestamp, phosphor-green |
+| **iPod Classic** | Click-wheel UI with green screen and pixelated retro aesthetic |
+| **Bento** | Grid of rounded cards — art, info, progress, controls each in their own box |
+| **Starry Sky** | Canvas shooting stars, aurora borealis gradient background |
+
+The active theme is used when no custom HTML or JS file is imported.
+
+---
+
+## JS Import (`.js` custom player)
+
+In addition to a full HTML file, you can import a `.js` file from Settings → Custom Player → Import HTML/JS File…. Your script is executed inside a minimal PWA shell that already has the following globals wired up:
+
+### Available globals
+
+| Name | Signature | Description |
+|---|---|---|
+| `cmd` | `(command: string, value?: number) => void` | Send a playback command (see Commands table) |
+| `elapsed` | `() => number` | Current playback position in seconds, interpolated locally |
+| `fmt` | `(seconds: number) => string` | Format seconds as `"m:ss"` or `"h:mm:ss"` |
+| `loadArt` | `(callback: (img: HTMLImageElement) => void) => void` | Load current artwork into an `<img>` and call back |
+| `getState` | `() => StateObject` | Returns the most recent state snapshot |
+| `window.onStateUpdate` | `(state: StateObject) => void` | **Assign this** to receive real-time state pushes |
+
+The SSE connection is established automatically before your script runs. Assign `window.onStateUpdate` to react to every state change:
+
+```js
+// minimal.js — drop-in example
+document.body.style.cssText = 'margin:0;background:#000;color:#fff;font:20px/1 sans-serif;display:flex;align-items:center;justify-content:center;height:100vh';
+const el = document.createElement('div');
+el.style.textAlign = 'center';
+document.body.appendChild(el);
+
+window.onStateUpdate = function(s) {
+  el.innerHTML = s.hasMedia
+    ? `<b>${s.title || 'Unknown'}</b><br><span style="opacity:.6">${s.artist || ''}</span>`
+    : 'Nothing playing';
+};
+```
+
+`window.onStateUpdate` is called immediately with the current state on first connect, then on every SSE push.

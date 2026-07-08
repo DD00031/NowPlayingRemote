@@ -17,6 +17,9 @@ final class SettingsManager {
         case showLyrics         = "showLyrics"
         case customPlayerHTML     = "customPlayerHTML"
         case customPlayerFileName = "customPlayerFileName"
+        case customPlayerJS       = "customPlayerJS"
+        case customPlayerJSFileName = "customPlayerJSFileName"
+        case selectedTheme        = "selectedTheme"
     }
 
     private init() {}
@@ -68,6 +71,25 @@ final class SettingsManager {
     var customPlayerFileName: String? {
         get { defaults.string(forKey: Key.customPlayerFileName.rawValue) }
         set { defaults.set(newValue, forKey: Key.customPlayerFileName.rawValue) }
+    }
+
+    var customPlayerJS: String? {
+        get { defaults.string(forKey: Key.customPlayerJS.rawValue) }
+        set { defaults.set(newValue, forKey: Key.customPlayerJS.rawValue) }
+    }
+
+    var customPlayerJSFileName: String? {
+        get { defaults.string(forKey: Key.customPlayerJSFileName.rawValue) }
+        set { defaults.set(newValue, forKey: Key.customPlayerJSFileName.rawValue) }
+    }
+
+    var selectedTheme: ThemeID {
+        get {
+            if let raw = defaults.string(forKey: Key.selectedTheme.rawValue),
+               let t = ThemeID(rawValue: raw) { return t }
+            return .clean
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.selectedTheme.rawValue) }
     }
 
     private func applyLaunchAtLogin(_ enabled: Bool) {

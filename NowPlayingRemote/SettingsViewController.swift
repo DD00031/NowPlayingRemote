@@ -20,6 +20,7 @@ final class SettingsViewController: NSViewController {
     private var statusLabel      = NSTextField()
     private var urlLabel         = NSTextField()
     private var applyPortBtn     = NSButton()
+    private var themePopup        = NSPopUpButton()
     private var customFileLabel  = NSTextField()
     private var resetCustomBtn   = NSButton()
 
@@ -32,7 +33,7 @@ final class SettingsViewController: NSViewController {
     required init?(coder: NSCoder) { fatalError() }
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 636))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 700))
     }
 
     override func viewDidLoad() {
@@ -44,7 +45,7 @@ final class SettingsViewController: NSViewController {
     // MARK: - UI Construction
 
     private func buildUI() {
-        var y: CGFloat = 586
+        var y: CGFloat = 650
 
         func addLabel(_ text: String, x: CGFloat, width: CGFloat, yOff: CGFloat = 0) -> NSTextField {
             let lbl = NSTextField(labelWithString: text)
@@ -185,24 +186,34 @@ final class SettingsViewController: NSViewController {
         separator()
         section("Custom Player")
 
+        addLabel("Theme", x: 20, width: 80)
+        themePopup = NSPopUpButton(frame: NSRect(x: 100, y: y - 2, width: 200, height: 24), pullsDown: false)
+        themePopup.addItems(withTitles: ThemeID.allCases.map { $0.displayName })
+        if let idx = ThemeID.allCases.firstIndex(of: settings.selectedTheme) {
+            themePopup.selectItem(at: idx)
+        }
+        themePopup.target = self; themePopup.action = #selector(themeChanged)
+        view.addSubview(themePopup)
+        y -= 34
+
         customFileLabel = NSTextField(labelWithString: customPlayerStatusText())
         customFileLabel.frame = NSRect(x: 20, y: y, width: 380, height: 18)
         customFileLabel.font = .systemFont(ofSize: 12)
-        customFileLabel.textColor = settings.customPlayerHTML != nil ? .systemGreen : .secondaryLabelColor
+        customFileLabel.textColor = (settings.customPlayerHTML != nil || settings.customPlayerJS != nil) ? .systemGreen : .secondaryLabelColor
         view.addSubview(customFileLabel)
         y -= 30
 
-        let importBtn = NSButton(title: "Import HTML File…", target: self, action: #selector(importHTMLFile))
-        importBtn.frame = NSRect(x: 20, y: y, width: 160, height: 24)
+        let importBtn = NSButton(title: "Import HTML/JS File…", target: self, action: #selector(importCustomFile))
+        importBtn.frame = NSRect(x: 20, y: y, width: 175, height: 24)
         importBtn.bezelStyle = .rounded
         importBtn.controlSize = .small
         view.addSubview(importBtn)
 
         resetCustomBtn = NSButton(title: "Reset to Default", target: self, action: #selector(resetCustomPlayer))
-        resetCustomBtn.frame = NSRect(x: 190, y: y, width: 140, height: 24)
+        resetCustomBtn.frame = NSRect(x: 205, y: y, width: 140, height: 24)
         resetCustomBtn.bezelStyle = .rounded
         resetCustomBtn.controlSize = .small
-        resetCustomBtn.isEnabled = settings.customPlayerHTML != nil
+        resetCustomBtn.isEnabled = settings.customPlayerHTML != nil || settings.customPlayerJS != nil
         view.addSubview(resetCustomBtn)
         y -= 40
 
@@ -223,9 +234,9 @@ final class SettingsViewController: NSViewController {
     }
 
     private func customPlayerStatusText() -> String {
-        if let name = settings.customPlayerFileName {
+        if let name = settings.customPlayerFileName ?? settings.customPlayerJSFileName {
             return "Active: \(name)"
-        } else if settings.customPlayerHTML != nil {
+        } else if settings.customPlayerHTML != nil || settings.customPlayerJS != nil {
             return "Custom player active"
         }
         return "No custom player set"
@@ -305,22 +316,38 @@ final class SettingsViewController: NSViewController {
         settings.showLyrics = lyricsCheck.state == .on
     }
 
-    @objc private func importHTMLFile() {
+    @objc private func themeChanged() {
+        let idx = themePopup.indexOfSelectedItem
+        guard idx >= 0 && idx < ThemeID.allCases.count else { return }
+        settings.selectedTheme = ThemeID.allCases[idx]
+    }
+
+    @objc private func importCustomFile() {
         let panel = NSOpenPanel()
-        panel.title = "Select HTML Player File"
+        panel.title = "Select HTML or JS Player File"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if #available(macOS 11.0, *) {
-            panel.allowedContentTypes = [.html]
+            panel.allowedContentTypes = [.html, .javaScript]
         } else {
-            panel.allowedFileTypes = ["html", "htm"]
+            panel.allowedFileTypes = ["html", "htm", "js"]
         }
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             do {
-                let html = try String(contentsOf: url, encoding: .utf8)
-                self.settings.customPlayerHTML = html
-                self.settings.customPlayerFileName = url.lastPathComponent
+                let content = try String(contentsOf: url, encoding: .utf8)
+                let ext = url.pathExtension.lowercased()
+                if ext == "js" {
+                    self.settings.customPlayerJS = content
+                    self.settings.customPlayerJSFileName = url.lastPathComponent
+                    self.settings.customPlayerHTML = nil
+                    self.settings.customPlayerFileName = nil
+                } else {
+                    self.settings.customPlayerHTML = content
+                    self.settings.customPlayerFileName = url.lastPathComponent
+                    self.settings.customPlayerJS = nil
+                    self.settings.customPlayerJSFileName = nil
+                }
                 DispatchQueue.main.async {
                     self.customFileLabel.stringValue = self.customPlayerStatusText()
                     self.customFileLabel.textColor = .systemGreen
@@ -340,6 +367,8 @@ final class SettingsViewController: NSViewController {
     @objc private func resetCustomPlayer() {
         settings.customPlayerHTML = nil
         settings.customPlayerFileName = nil
+        settings.customPlayerJS = nil
+        settings.customPlayerJSFileName = nil
         customFileLabel.stringValue = "No custom player set"
         customFileLabel.textColor = .secondaryLabelColor
         resetCustomBtn.isEnabled = false

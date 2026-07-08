@@ -132,7 +132,7 @@ final class MenuBarController {
         if settingsWindow == nil {
             let vc = SettingsViewController(httpServer: httpServer, settings: settings)
             let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 636),
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 700),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
