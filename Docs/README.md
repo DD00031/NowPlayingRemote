@@ -15,6 +15,7 @@ Welcome to the Now Playing Remote documentation. This folder contains comprehens
 
 ## For Theme Creators
 
+- **[Themes Gallery](THEMES.md)** — Showcase of all 10 built-in themes with screenshots
 - **[Theme Development Guide](THEME_DEVELOPMENT.md)** — Creating custom `.theme` archives with CSS, JS, and assets
 
 ---

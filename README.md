@@ -128,6 +128,8 @@ If your firewall is enabled and you can't connect:
 | **Minimal** | Minimalist | Text-only, ultra-clean |
 | **Poster** | Print-style | Monochrome design |
 
+**View screenshots of all themes →** [**Themes Gallery**](Docs/THEMES.md)
+
 ### Custom Themes
 Create a `.theme` archive (renamed ZIP) with:
 - `theme.json` — metadata (name, author, version)
