@@ -44,6 +44,19 @@ Works with **any app** using macOS MediaRemote framework:
 - Xcode 15+ (to build from source)
 - Devices must be on the same local network
 
+Download the "NowPlayingRemote.dmg" file from the [latest release](https://github.com/DD00031/NowPlayingRemote/releases/latest). Open it and move the app into your `Applications` folder.
+
+
+> [!IMPORTANT]
+>
+> Apple will flag this app as it is not signed by an registered developer, this doesn't mean the app is not safe. To use the app follow the steps below
+> 1. Click **OK** to close the popup.
+> 2. Open **System Settings** > **Privacy & Security**.
+> 3. Scroll down and click **Open Anyway**.
+> 4. Confirm your choice when prompted.
+>
+> You only need to do this once.
+
 ### Build from Source
 
 1. Clone the repository
@@ -156,7 +169,7 @@ Now Playing Remote is available under the GPL-3.0 license. See [LICENSE](LICENSE
 Built with assistance from:
 - Claude Haiku 4.5
 - Claude Sonnet 4.6
-- Claude Opus 4.8
+- Gemini 3.1 Pro
 
 Architecture and real-time features powered by:
 - [mediaremote-adapter](https://github.com/ejbills/mediaremote-adapter) by ejbills
