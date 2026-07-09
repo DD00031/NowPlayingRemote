@@ -97,6 +97,35 @@ LyricsManager.onLyricsReady
 
 UUID pattern for manually added entries in `project.pbxproj`: `A001XXXXXXXXXXXX` (build files) / `A002XXXXXXXXXXXX` (file references). New Swift sources go in the `PBXSourcesBuildPhase`; new resources (images, SVG) go in the `PBXResourcesBuildPhase`. The package dependency on `MediaRemoteAdapter` uses `branch = master` (no version tags exist on that repo).
 
+### Theme Archives (.theme files)
+
+`ThemeArchiveManager` (singleton) handles import, storage, and asset serving for `.theme` archives.
+
+A `.theme` file is a ZIP with the extension renamed. Required layout:
+```
+theme.json     # name, author?, version?, supportsLyrics?
+styles.css     # CSS injected after default np-* layout rules
+script.js      # (optional) JS injected after default onStateUpdate
+assets/        # (optional) images/fonts served at /theme-assets/<filename>
+```
+
+When a theme is active (`settings.useThemeArchive == true`), `HTTPServer.servePlayer` calls `customThemeArchiveHTML(themeManager:settings:)` which generates the base HTML shell with the CSS/JS injected.
+
+**Base HTML DOM contract** (IDs/classes available to CSS/JS):
+- `#conn-dot` — connection indicator
+- `.np-root` — root flex container
+- `.np-artwork-wrap` / `#art` / `#art-ph` — artwork area
+- `.np-info` / `#title` / `#artist` / `#album` — track info
+- `.np-controls` / `.np-btn-prev` / `.np-btn-play` / `.np-btn-next` / `#ico-play` / `#ico-pause`
+- `.np-seek` / `#pb-e` / `input#pb` / `#pb-r` — seek bar
+- `#lyrics-panel` / `#lyric-lines` / `#btn-lyrics` (only when `supportsLyrics:true`)
+
+**JS globals available to script.js:** `cmd()`, `elapsed()`, `fmt()`, `loadArt()`, `getState()`, `window.onStateUpdate` (override to customise state handling).
+
+Assets in `assets/` are served at `/theme-assets/<filename>`. Path traversal (`..`) is rejected server-side.
+
+Only one theme can be installed at a time. The archive is extracted to `~/Library/Application Support/NowPlayingRemote/ImportedTheme/`. A security warning is shown before the file picker on import.
+
 ### Settings keys (`UserDefaults`)
 
 | Key | Default | Controls |
@@ -110,6 +139,7 @@ UUID pattern for manually added entries in `project.pbxproj`: `A001XXXXXXXXXXXX`
 | `showLyrics` | true | Lyrics panel + LRCLIB fetching |
 | `lyricsAutoHide` | true | Auto-hide panel when no lyrics found |
 | `selectedTheme` | `"clean"` | `ThemeID.rawValue` of the active built-in theme |
+| `useThemeArchive` | false | When true, serve the imported `.theme` archive instead of a built-in theme |
 
 `SettingsViewController` uses `NSSwitch` controls (macOS 10.15+) for all boolean toggles, with a label-left / switch-right row layout grouped by section (Server, Startup, Player). Theme-specific controls (skip interval, volume, lyrics) are shown/hidden and repositioned dynamically via `updateDynamicSection()`.
 

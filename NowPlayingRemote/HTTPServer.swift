@@ -165,6 +165,7 @@ final class HTTPServer {
         case ("GET",  "/manifest.json"): serveManifest(fd)
         case ("GET",  "/icon-180.png"):  serveAppIcon(fd)
         case ("OPTIONS", _):             sendCORSPreflight(fd)
+        case ("GET", _) where path.hasPrefix("/theme-assets/"): serveThemeAsset(fd, path: path)
         default:                         send404(fd)
         }
 
@@ -175,10 +176,13 @@ final class HTTPServer {
 
     private func servePlayer(_ fd: Int32) {
         let html: String
+        let tm = ThemeArchiveManager.shared
         if let customHTML = settings.customPlayerHTML {
             html = customHTML
         } else if let customJS = settings.customPlayerJS {
             html = jsShellHTML(js: customJS)
+        } else if settings.useThemeArchive && tm.isInstalled {
+            html = customThemeArchiveHTML(themeManager: tm, settings: settings)
         } else {
             html = themeHTML(for: settings.selectedTheme, settings: settings)
         }
@@ -429,6 +433,17 @@ final class HTTPServer {
     private func send400(_ fd: Int32) {
         let body = Data("Bad Request".utf8)
         sendAll(fd, data: httpResponse(status: "400 Bad Request", contentType: "text/plain", body: body))
+    }
+
+    private func serveThemeAsset(_ fd: Int32, path: String) {
+        let filename = String(path.dropFirst("/theme-assets/".count))
+        guard !filename.isEmpty else { send404(fd); return }
+        let tm = ThemeArchiveManager.shared
+        guard let data = tm.assetData(name: filename) else { send404(fd); return }
+        let response = httpResponse(status: "200 OK",
+                                    contentType: tm.mimeType(for: filename),
+                                    body: data)
+        sendAll(fd, data: response)
     }
 
     private func send404(_ fd: Int32) {

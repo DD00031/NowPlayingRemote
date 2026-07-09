@@ -21,6 +21,7 @@ final class SettingsManager {
         case customPlayerJSFileName = "customPlayerJSFileName"
         case selectedTheme        = "selectedTheme"
         case lyricsAutoHide       = "lyricsAutoHide"
+        case useThemeArchive      = "useThemeArchive"
     }
 
     private init() {}
@@ -87,6 +88,11 @@ final class SettingsManager {
     var lyricsAutoHide: Bool {
         get { defaults.object(forKey: Key.lyricsAutoHide.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.lyricsAutoHide.rawValue) }
+    }
+
+    var useThemeArchive: Bool {
+        get { defaults.bool(forKey: Key.useThemeArchive.rawValue) }
+        set { defaults.set(newValue, forKey: Key.useThemeArchive.rawValue) }
     }
 
     var selectedTheme: ThemeID {

@@ -1558,3 +1558,128 @@ window._onLyricsToggle=function(open){
 </script></body></html>
 """
 }
+
+// MARK: - Theme Archive (.theme) ──────────────────────────────────────────────
+//
+// Renders the base HTML shell for a .theme archive. The archive supplies:
+//   styles.css  — injected into <style> after the default np-* layout rules
+//   script.js   — injected after window.onStateUpdate so it can override it
+//   assets/     — served at /theme-assets/<filename>
+//
+// DOM contract (IDs / classes the CSS/JS may target):
+//   #conn-dot            connection status dot (fixed, managed by coreJS)
+//   .np-root             outermost layout flex container
+//   .np-artwork-wrap     artwork wrapper  #art / #art-ph inside
+//   .np-info             title/artist/album block  #title #artist #album
+//   .np-controls         playback buttons  .np-btn-prev .np-btn-play .np-btn-next
+//                          #ico-play / #ico-pause SVGs inside .np-btn-play
+//   .np-seek             seek row  #pb-e  input#pb  #pb-r
+//   #lyrics-panel        lyrics container (only when supportsLyrics:true in theme.json)
+//     #lyric-lines       scrolling lines  .lyric-line .lyric-status
+//   .lyr-btn-row / #btn-lyrics  lyrics toggle button
+//
+// JS globals (injected by coreJS / seekBarJS / lyricsHelperJS):
+//   cmd(command, value?)   send media command to app
+//   elapsed()              current elapsed seconds
+//   fmt(seconds)           "M:SS" formatter
+//   loadArt(cb)            cb(img) receives a loaded Image object
+//   getState()             current state object
+//   window.onStateUpdate   called on every SSE push — override in script.js:
+//                          const _orig=window.onStateUpdate;
+//                          window.onStateUpdate=s=>{_orig(s);/* your code */};
+//
+func customThemeArchiveHTML(themeManager: ThemeArchiveManager, settings: SettingsManager) -> String {
+    let manifest  = themeManager.manifest()
+    let themeName = manifest?.name ?? "Custom Theme"
+    let css       = themeManager.css() ?? ""
+    let rawJS     = themeManager.js() ?? ""
+    let safeJS    = rawJS.replacingOccurrences(of: "</script>", with: "<\\/script>")
+    let supportsLyr = manifest?.supportsLyrics ?? false
+    let showLyr   = settings.showLyrics && supportsLyr
+
+    return """
+<!DOCTYPE html><html lang="en"><head>
+\(pwaHead(title: themeName))
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
+\(connDotCSS)
+/* ── Default np-* layout (override freely in styles.css) ── */
+.np-root{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,2vh,22px);padding:clamp(16px,4vw,32px)}
+.np-artwork-wrap{width:clamp(120px,40vmin,280px);height:clamp(120px,40vmin,280px);border-radius:clamp(6px,2vw,16px);overflow:hidden;flex-shrink:0}
+.np-artwork{width:100%;height:100%;object-fit:cover;display:none}
+.np-artwork-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(128,128,128,.18);font-size:clamp(30px,8vmin,60px)}
+.np-info{text-align:center;max-width:min(400px,80vw)}
+.np-title{font-size:clamp(15px,4vw,22px);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.np-artist{font-size:clamp(12px,3vw,16px);opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.np-album{font-size:clamp(11px,2.5vw,13px);opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.np-controls{display:flex;align-items:center;gap:clamp(8px,2vw,18px)}
+.np-btn{background:none;border:none;cursor:pointer;padding:8px;border-radius:50%;color:inherit;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.np-btn:hover{background:rgba(128,128,128,.18)}
+.np-seek{display:flex;align-items:center;gap:8px;width:100%;max-width:min(320px,80vw)}
+.np-time{font-size:12px;opacity:.6;min-width:36px}.np-time:last-child{text-align:right}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;outline:none;--fill:0%}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(to right,currentColor var(--fill),rgba(128,128,128,.3) var(--fill))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:currentColor;cursor:pointer;margin-top:-4.5px}
+\(showLyr ? """
+#lyrics-panel{display:none;flex-direction:column;overflow:hidden;max-height:40vh;width:min(360px,90vw);border-radius:12px}
+#lyrics-panel.open{display:flex}
+#lyric-lines{overflow-y:auto;padding:12px}
+.lyric-line{padding:5px 8px;border-radius:6px;cursor:pointer;transition:opacity .2s;opacity:.45;font-size:14px;line-height:1.5}
+.lyric-line.active{opacity:1;font-weight:600}.lyric-line.near-active{opacity:.7}
+.lyric-status{padding:8px;opacity:.5;font-size:13px;text-align:center}
+.lyr-btn-row{display:flex;justify-content:center}
+#btn-lyrics{background:none;border:1px solid rgba(128,128,128,.4);border-radius:20px;padding:4px 16px;cursor:pointer;font-size:13px;color:inherit;transition:all .2s}
+#btn-lyrics.on{border-color:currentColor}
+""" : "")
+/* ── Custom theme styles ── */
+\(css)
+</style>
+</head><body>
+<div id="conn-dot"></div>
+<div class="np-root">
+  <div class="np-artwork-wrap">
+    <img id="art" class="np-artwork" alt="">
+    <div id="art-ph" class="np-artwork-ph">♫</div>
+  </div>
+  <div class="np-info">
+    <div id="title" class="np-title">Nothing Playing</div>
+    <div id="artist" class="np-artist"></div>
+    <div id="album" class="np-album"></div>
+  </div>
+  <div class="np-controls">
+    <button class="np-btn np-btn-prev" onclick="cmd('previousTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+    <button class="np-btn np-btn-play" onclick="cmd('togglePlayPause')">
+      <svg id="ico-play" viewBox="0 0 24 24" fill="currentColor" width="30" height="30"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="ico-pause" viewBox="0 0 24 24" fill="currentColor" width="30" height="30" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
+    <button class="np-btn np-btn-next" onclick="cmd('nextTrack')"><svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg></button>
+  </div>
+  <div class="np-seek">
+    <span id="pb-e" class="np-time">0:00</span>
+    <input type="range" id="pb" min="0" max="1000" value="0">
+    <span id="pb-r" class="np-time">-0:00</span>
+  </div>
+  \(showLyr ? "<div id=\"lyrics-panel\"><div id=\"lyric-lines\"></div></div><div class=\"lyr-btn-row\"><button id=\"btn-lyrics\" onclick=\"toggleLyrics()\">Lyrics</button></div>" : "")
+</div>
+<script>
+let _av=-1;
+function _defaultUpdate(s){
+  const t=document.getElementById('title');if(t)t.textContent=s.hasMedia?(s.title||'Unknown'):'Nothing Playing';
+  const ar=document.getElementById('artist');if(ar)ar.textContent=s.hasMedia?(s.artist||''):'';
+  const al=document.getElementById('album');if(al)al.textContent=s.hasMedia?(s.album||''):'';
+  const pl=s.isPlaying||(s.playbackRate>0);
+  const ip=document.getElementById('ico-play'),ipa=document.getElementById('ico-pause');
+  if(ip)ip.style.display=pl?'none':'block';if(ipa)ipa.style.display=pl?'block':'none';
+  if(s.hasArtwork&&s.artworkVersion!==_av){_av=s.artworkVersion;loadArt(function(img){const a=document.getElementById('art');if(a){a.src=img.src;a.style.display='block';}const ph=document.getElementById('art-ph');if(ph)ph.style.display='none'});}
+  else if(!s.hasArtwork){_av=-1;const a=document.getElementById('art');if(a)a.style.display='none';const ph=document.getElementById('art-ph');if(ph)ph.style.display='block';}
+  \(showLyr ? "if(s.lyricsVersion!==undefined&&s.lyricsVersion!==window._getLyricsVer()){window._setLyricsVer(s.lyricsVersion);window._fetchLyrics();}" : "")
+}
+window.onStateUpdate=_defaultUpdate;
+\(safeJS.isEmpty ? "" : "// ── Custom theme script ────────────────────────────────\n\(safeJS)\n// ────────────────────────────────────────────────────────")
+\(seekBarJS)
+\(showLyr ? lyricsHelperJS(autoHide: settings.lyricsAutoHide) : "")
+\(coreJS)
+</script></body></html>
+"""
+}
