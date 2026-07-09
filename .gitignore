@@ -6,12 +6,75 @@ DerivedData/
 *.mode1v3
 *.mode2v3
 *.perspectivev3
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/
+*.xcodeproj/xcshareddata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/
+*.xcprivacy
+
+# Xcode build products
+build/
+*.o
+*.a
+*.exe
+*.dylib
+*.dSYM/
+*.bundle
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
 
 # Build outputs
 Exports/
+*.dmg
+*.app/
 
-# Swift Package Manager (keep Package.resolved)
+# Swift Package Manager
 .build/
+.swiftpm/
+Package.resolved
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
+
+# Logs
+*.log
+debug.log
+
+# OS-specific
+Thumbs.db
+*.cab
+
+# CocoaPods (if used)
+Pods/
+Podfile.lock
+
+# Carthage (if used)
+Carthage/
+Cartfile.resolved
+
+# fastlane (if used)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# Code coverage
+coverage/
+*.xcoverage
