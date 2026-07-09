@@ -1,0 +1,52 @@
+{
+  "fill" : {
+    "automatic-gradient" : "gray:0.95199,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.00000,0.56246,1.00000,1.00000",
+              "display-p3:1.00000,0.48290,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.5,
+                "y" : 0.7
+              }
+            }
+          },
+          "image-name" : "Now-Playing-Remote-Icon.svg",
+          "name" : "Now-Playing-Remote-Icon",
+          "position" : {
+            "scale" : 0.48,
+            "translation-in-points" : [
+              21.120519407294523,
+              -3.9040960116514043
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
