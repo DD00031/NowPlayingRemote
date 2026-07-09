@@ -100,9 +100,13 @@ final class SettingsViewController: NSViewController {
 
     override func loadView() {
         let effectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 500, height: 500))
-        effectView.material = .popover
+        
+        // FIX 1: Enforce a vibrant dark appearance so the Mission Control snapshot never falls back to light grey
+        effectView.appearance = NSAppearance(named: .vibrantDark)
+        effectView.material = .underWindowBackground
         effectView.blendingMode = .behindWindow
         effectView.state = .active
+        
         view = effectView
     }
 
@@ -147,7 +151,10 @@ final class SettingsViewController: NSViewController {
             mainStack.topAnchor.constraint(equalTo: view.topAnchor),
             mainStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             mainStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            mainStack.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            mainStack.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            
+            // FIX 2: Explicitly lock the window width to prevent horizontal expansion
+            view.widthAnchor.constraint(equalToConstant: 500)
         ])
 
         // ── Title ─────────────────────────────────────────────────────────────
@@ -259,8 +266,14 @@ final class SettingsViewController: NSViewController {
         themeWarningNote.font = .systemFont(ofSize: 11)
         themeWarningNote.textColor = .systemOrange
         themeWarningNote.isHidden = true
-        themeWarningNote.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -60).isActive = true
+        themeWarningNote.translatesAutoresizingMaskIntoConstraints = false
+        
+        // FIX 3: Tell the text field its maximum layout width so it wraps text properly instead of expanding the window
+        themeWarningNote.preferredMaxLayoutWidth = 440
+        
+        // Must be in hierarchy before activating cross-view constraints
         mainStack.addArrangedSubview(themeWarningNote)
+        themeWarningNote.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -60).isActive = true
 
         // INFO FOOTER
         let footerNote = NSTextField(labelWithString: "Changes to port or volume control require restarting the server.")
