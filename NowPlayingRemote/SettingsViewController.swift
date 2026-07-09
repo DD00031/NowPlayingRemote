@@ -24,6 +24,16 @@ private enum PlayerSelection: Equatable {
         if case .theme(let t) = self { return t.supportsLyrics }
         return false
     }
+
+    var supportsSkipInterval: Bool {
+        if case .theme(let t) = self { return t.supportsSkipInterval }
+        return false
+    }
+
+    var supportsVolumeControl: Bool {
+        if case .theme(let t) = self { return t.supportsVolumeControl }
+        return false
+    }
 }
 
 final class SettingsViewController: NSViewController {
@@ -31,30 +41,32 @@ final class SettingsViewController: NSViewController {
     private let httpServer: HTTPServer
     private let settings: SettingsManager
 
-    // MARK: - Persistent controls (always visible)
+    // MARK: - Server controls
     private var portField        = NSTextField()
     private var portStepper      = NSStepper()
-    private var autoStartCheck   = NSButton()
-    private var launchLoginCheck = NSButton()
     private var serverToggleBtn  = NSButton()
     private var statusLabel      = NSTextField()
     private var urlLabel         = NSTextField()
     private var applyPortBtn     = NSButton()
 
-    // MARK: - Player section (dynamic)
-    private var playerSectionBox  = NSBox()        // separator
-    private var playerSectionLbl  = NSTextField()  // "PLAYER" header
+    // MARK: - Startup toggles
+    private var autoStartSwitch   = NSSwitch()
+    private var launchLoginSwitch = NSSwitch()
+
+    // MARK: - Player section (static)
     private var themeLabel        = NSTextField()
     private var themePopup        = NSPopUpButton()
 
-    // Theme-specific controls (shown/hidden dynamically)
+    // MARK: - Player section (dynamic)
     private var skipLabel         = NSTextField()
     private var skipPopup         = NSPopUpButton()
-    private var volumeCheck       = NSButton()
-    private var lyricsCheck       = NSButton()
-    private var lyricsAutoHideCheck = NSButton()
+    private var volumeLbl         = NSTextField()
+    private var volumeSwitch      = NSSwitch()
+    private var lyricsLbl         = NSTextField()
+    private var lyricsSwitch      = NSSwitch()
+    private var lyricsAutoHideLbl = NSTextField()
+    private var lyricsAutoHideSwitch = NSSwitch()
 
-    // Custom file controls
     private var customFileLabel   = NSTextField()
     private var importBtn         = NSButton()
     private var resetCustomBtn    = NSButton()
@@ -73,7 +85,7 @@ final class SettingsViewController: NSViewController {
     required init?(coder: NSCoder) { fatalError() }
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 700))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 700))
     }
 
     override func viewDidLoad() {
@@ -96,201 +108,208 @@ final class SettingsViewController: NSViewController {
         }
     }
 
+    // MARK: - Layout helpers
+
+    private func makeGroupBox(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) -> NSView {
+        let v = NSView(frame: NSRect(x: x, y: y, width: w, height: h))
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.06).cgColor
+        v.layer?.cornerRadius = 10
+        v.layer?.borderColor = NSColor(white: 0.7, alpha: 0.12).cgColor
+        v.layer?.borderWidth = 0.5
+        return v
+    }
+
+    private func addRowSep(in parent: NSView, atY y: CGFloat) {
+        let sep = NSBox(); sep.boxType = .separator
+        sep.frame = NSRect(x: 14, y: y, width: parent.frame.width - 28, height: 1)
+        parent.addSubview(sep)
+    }
+
+    private func rowLabel(_ text: String, color: NSColor = .labelColor) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 13)
+        l.textColor = color
+        return l
+    }
+
     // MARK: - UI Construction
 
     private func buildUI() {
-        let W: CGFloat = 420
-        var y: CGFloat = 660
-
-        func label(_ text: String, x: CGFloat = 20, width: CGFloat = 380, size: CGFloat = 12, weight: NSFont.Weight = .medium, color: NSColor = .secondaryLabelColor) -> NSTextField {
-            let lbl = NSTextField(labelWithString: text)
-            lbl.frame = NSRect(x: x, y: y, width: width, height: 18)
-            lbl.font = .systemFont(ofSize: size, weight: weight)
-            lbl.textColor = color
-            view.addSubview(lbl)
-            return lbl
-        }
+        let W: CGFloat = 460
+        var y: CGFloat = 662
 
         func sectionHeader(_ title: String) {
-            let sep = NSBox(); sep.boxType = .separator
-            sep.frame = NSRect(x: 20, y: y + 4, width: W - 40, height: 1)
-            view.addSubview(sep)
-            y -= 16
-
             let lbl = NSTextField(labelWithString: title.uppercased())
-            lbl.frame = NSRect(x: 20, y: y, width: W - 40, height: 16)
+            lbl.frame = NSRect(x: 20, y: y, width: W - 40, height: 14)
             lbl.font = .systemFont(ofSize: 10, weight: .semibold)
             lbl.textColor = .tertiaryLabelColor
             view.addSubview(lbl)
-            y -= 26
+            y -= 22
         }
 
-        func checkbox(_ title: String) -> NSButton {
-            let btn = NSButton(checkboxWithTitle: title, target: nil, action: nil)
-            btn.frame = NSRect(x: 20, y: y, width: W - 40, height: 20)
-            btn.font = .systemFont(ofSize: 13)
-            return btn
-        }
-
-        // ── App title ──────────────────────────────────────────────────────
+        // ── Title ─────────────────────────────────────────────────────────────
         let titleLbl = NSTextField(labelWithString: "Now Playing Remote")
-        titleLbl.frame = NSRect(x: 20, y: y, width: 300, height: 24)
-        titleLbl.font = .systemFont(ofSize: 16, weight: .bold)
+        titleLbl.frame = NSRect(x: 20, y: y, width: W - 40, height: 26)
+        titleLbl.font = .systemFont(ofSize: 17, weight: .semibold)
         view.addSubview(titleLbl)
-        y -= 36
+        y -= 42
 
-        // ── Server ──────────────────────────────────────────────────────
-        let _ = sectionHeader("Server")  // inline — moves y
+        // ── Server ────────────────────────────────────────────────────────────
+        sectionHeader("Server")
 
-        statusLabel = NSTextField(labelWithString: "")
-        statusLabel.frame = NSRect(x: 20, y: y, width: W - 40, height: 18)
-        statusLabel.font = .systemFont(ofSize: 12)
-        view.addSubview(statusLabel)
-        y -= 22
+        let srvH: CGFloat = 118
+        let srvBox = makeGroupBox(x: 16, y: y - srvH, w: W - 32, h: srvH)
+        view.addSubview(srvBox)
+        let bW = srvBox.frame.width
 
-        urlLabel = NSTextField(labelWithString: "")
-        urlLabel.frame = NSRect(x: 20, y: y, width: 270, height: 18)
+        // Row 1 (top): status + toggle button
+        statusLabel.frame = NSRect(x: 14, y: 85, width: bW - 132, height: 20)
+        statusLabel.font = .systemFont(ofSize: 13)
+        srvBox.addSubview(statusLabel)
+
+        serverToggleBtn = NSButton(title: "", target: self, action: #selector(toggleServer))
+        serverToggleBtn.frame = NSRect(x: bW - 116, y: 83, width: 102, height: 22)
+        serverToggleBtn.bezelStyle = .rounded; serverToggleBtn.controlSize = .small
+        srvBox.addSubview(serverToggleBtn)
+
+        addRowSep(in: srvBox, atY: 78)
+
+        // Row 2: URL + copy
+        urlLabel.frame = NSRect(x: 14, y: 56, width: bW - 84, height: 18)
         urlLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         urlLabel.textColor = .linkColor
         urlLabel.isSelectable = true
-        view.addSubview(urlLabel)
+        srvBox.addSubview(urlLabel)
 
         let copyBtn = NSButton(title: "Copy", target: self, action: #selector(copyURL))
-        copyBtn.frame = NSRect(x: 300, y: y - 2, width: 100, height: 22)
+        copyBtn.frame = NSRect(x: bW - 70, y: 54, width: 56, height: 22)
         copyBtn.bezelStyle = .rounded; copyBtn.controlSize = .small
-        view.addSubview(copyBtn)
-        y -= 32
+        srvBox.addSubview(copyBtn)
 
-        // Port row
-        let portLbl = NSTextField(labelWithString: "Port")
-        portLbl.frame = NSRect(x: 20, y: y, width: 60, height: 18)
-        portLbl.font = .systemFont(ofSize: 12, weight: .medium)
-        portLbl.textColor = .secondaryLabelColor
-        view.addSubview(portLbl)
+        addRowSep(in: srvBox, atY: 40)
 
-        portField.frame = NSRect(x: 80, y: y, width: 70, height: 22)
+        // Row 3 (bottom): port
+        let portLbl = rowLabel("Port", color: .secondaryLabelColor)
+        portLbl.frame = NSRect(x: 14, y: 12, width: 40, height: 20)
+        srvBox.addSubview(portLbl)
+
+        portField.frame = NSRect(x: 60, y: 11, width: 64, height: 22)
         portField.stringValue = String(settings.port)
         portField.formatter = { let f = NumberFormatter(); f.minimum = 1024; f.maximum = 65535; return f }()
         portField.isEditable = true
-        view.addSubview(portField)
+        srvBox.addSubview(portField)
 
-        portStepper.frame = NSRect(x: 155, y: y, width: 22, height: 22)
+        portStepper.frame = NSRect(x: 128, y: 11, width: 22, height: 22)
         portStepper.minValue = 1024; portStepper.maxValue = 65535; portStepper.increment = 1
         portStepper.integerValue = settings.port
         portStepper.target = self; portStepper.action = #selector(portStepperChanged)
-        view.addSubview(portStepper)
+        srvBox.addSubview(portStepper)
 
         applyPortBtn = NSButton(title: "Apply", target: self, action: #selector(applyPort))
-        applyPortBtn.frame = NSRect(x: 185, y: y, width: 70, height: 22)
+        applyPortBtn.frame = NSRect(x: 156, y: 11, width: 60, height: 22)
         applyPortBtn.bezelStyle = .rounded; applyPortBtn.controlSize = .small
-        view.addSubview(applyPortBtn)
+        srvBox.addSubview(applyPortBtn)
 
-        serverToggleBtn = NSButton(title: "", target: self, action: #selector(toggleServer))
-        serverToggleBtn.frame = NSRect(x: 265, y: y, width: 115, height: 22)
-        serverToggleBtn.bezelStyle = .rounded; serverToggleBtn.controlSize = .small
-        view.addSubview(serverToggleBtn)
-        y -= 36
+        y -= srvH + 18
 
-        // ── Startup ──────────────────────────────────────────────────────
-        let _ = sectionHeader("Startup")
+        // ── Startup ───────────────────────────────────────────────────────────
+        sectionHeader("Startup")
 
-        autoStartCheck = checkbox("Start server automatically on launch")
-        autoStartCheck.state = settings.autoStartServer ? .on : .off
-        autoStartCheck.target = self; autoStartCheck.action = #selector(autoStartChanged)
-        view.addSubview(autoStartCheck)
-        y -= 26
+        let stH: CGFloat = 88
+        let stBox = makeGroupBox(x: 16, y: y - stH, w: W - 32, h: stH)
+        view.addSubview(stBox)
+        let stW = stBox.frame.width
 
-        launchLoginCheck = checkbox("Launch at login")
-        launchLoginCheck.state = settings.launchAtLogin ? .on : .off
-        launchLoginCheck.target = self; launchLoginCheck.action = #selector(launchLoginChanged)
-        view.addSubview(launchLoginCheck)
-        y -= 36
+        let asLbl = rowLabel("Start server automatically on launch")
+        asLbl.frame = NSRect(x: 14, y: 55, width: stW - 80, height: 20)
+        stBox.addSubview(asLbl)
+        autoStartSwitch.state = settings.autoStartServer ? .on : .off
+        autoStartSwitch.target = self; autoStartSwitch.action = #selector(autoStartChanged)
+        autoStartSwitch.frame = NSRect(x: stW - 58, y: 52, width: 44, height: 26)
+        stBox.addSubview(autoStartSwitch)
 
-        // ── Player ──────────────────────────────────────────────────────
-        let playerSep = NSBox(); playerSep.boxType = .separator
-        playerSep.frame = NSRect(x: 20, y: y + 4, width: W - 40, height: 1)
-        view.addSubview(playerSep)
-        y -= 16
+        addRowSep(in: stBox, atY: 44)
 
-        playerSectionLbl = NSTextField(labelWithString: "PLAYER")
-        playerSectionLbl.frame = NSRect(x: 20, y: y, width: W - 40, height: 16)
-        playerSectionLbl.font = .systemFont(ofSize: 10, weight: .semibold)
-        playerSectionLbl.textColor = .tertiaryLabelColor
-        view.addSubview(playerSectionLbl)
-        y -= 28
+        let llLbl = rowLabel("Launch at login")
+        llLbl.frame = NSRect(x: 14, y: 13, width: stW - 80, height: 20)
+        stBox.addSubview(llLbl)
+        launchLoginSwitch.state = settings.launchAtLogin ? .on : .off
+        launchLoginSwitch.target = self; launchLoginSwitch.action = #selector(launchLoginChanged)
+        launchLoginSwitch.frame = NSRect(x: stW - 58, y: 10, width: 44, height: 26)
+        stBox.addSubview(launchLoginSwitch)
 
-        // Theme picker row
-        themeLabel = NSTextField(labelWithString: "Theme")
-        themeLabel.frame = NSRect(x: 20, y: y, width: 80, height: 18)
-        themeLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        themeLabel.textColor = .secondaryLabelColor
-        view.addSubview(themeLabel)
+        y -= stH + 18
 
-        themePopup = NSPopUpButton(frame: NSRect(x: 100, y: y - 2, width: W - 120, height: 24), pullsDown: false)
+        // ── Player ────────────────────────────────────────────────────────────
+        sectionHeader("Player")
+
+        let thmLbl = rowLabel("Theme", color: .secondaryLabelColor)
+        thmLbl.frame = NSRect(x: 20, y: y, width: 70, height: 18)
+        view.addSubview(thmLbl)
+        themeLabel = thmLbl
+
+        themePopup = NSPopUpButton(frame: NSRect(x: 90, y: y - 2, width: W - 110, height: 24), pullsDown: false)
         themePopup.addItems(withTitles: PlayerSelection.allCases.map { $0.displayName })
         let selIdx = PlayerSelection.allCases.firstIndex(of: currentSelection) ?? 0
         themePopup.selectItem(at: selIdx)
         themePopup.target = self; themePopup.action = #selector(themePickerChanged)
         view.addSubview(themePopup)
-        y -= 34
+        y -= 36
 
-        // ── Dynamic controls (positioned relative to current y) ──────────
-        // All start at y; updateDynamicSection will show/hide + reposition them.
-
-        // Skip interval
-        skipLabel = NSTextField(labelWithString: "Skip interval")
-        skipLabel.frame = NSRect(x: 20, y: y, width: 100, height: 18)
-        skipLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        skipLabel.textColor = .secondaryLabelColor
+        // Dynamic controls — all initially positioned at y; updateDynamicSection repositions them.
+        skipLabel = rowLabel("Skip interval", color: .secondaryLabelColor)
+        skipLabel.frame = NSRect(x: 20, y: y, width: 110, height: 18)
         view.addSubview(skipLabel)
 
-        skipPopup = NSPopUpButton(frame: NSRect(x: 130, y: y - 2, width: 130, height: 24), pullsDown: false)
+        skipPopup = NSPopUpButton(frame: NSRect(x: 140, y: y - 2, width: 150, height: 24), pullsDown: false)
         skipPopup.addItems(withTitles: ["5 seconds", "10 seconds", "15 seconds", "30 seconds"])
         let skipMap = [5: 0, 10: 1, 15: 2, 30: 3]
         skipPopup.selectItem(at: skipMap[settings.skipInterval] ?? 2)
         skipPopup.target = self; skipPopup.action = #selector(skipChanged)
         view.addSubview(skipPopup)
-        y -= 32
 
-        volumeCheck = checkbox("Show volume control")
-        volumeCheck.state = settings.showVolumeControl ? .on : .off
-        volumeCheck.target = self; volumeCheck.action = #selector(volumeChanged)
-        view.addSubview(volumeCheck)
-        y -= 26
+        volumeLbl = rowLabel("Show volume control")
+        volumeLbl.frame = NSRect(x: 20, y: y, width: W - 100, height: 20)
+        view.addSubview(volumeLbl)
+        volumeSwitch.state = settings.showVolumeControl ? .on : .off
+        volumeSwitch.target = self; volumeSwitch.action = #selector(volumeChanged)
+        volumeSwitch.frame = NSRect(x: W - 64, y: y - 2, width: 44, height: 26)
+        view.addSubview(volumeSwitch)
 
-        lyricsCheck = checkbox("Show lyrics")
-        lyricsCheck.state = settings.showLyrics ? .on : .off
-        lyricsCheck.target = self; lyricsCheck.action = #selector(lyricsChanged)
-        view.addSubview(lyricsCheck)
-        y -= 26
+        lyricsLbl = rowLabel("Show lyrics")
+        lyricsLbl.frame = NSRect(x: 20, y: y, width: W - 100, height: 20)
+        view.addSubview(lyricsLbl)
+        lyricsSwitch.state = settings.showLyrics ? .on : .off
+        lyricsSwitch.target = self; lyricsSwitch.action = #selector(lyricsChanged)
+        lyricsSwitch.frame = NSRect(x: W - 64, y: y - 2, width: 44, height: 26)
+        view.addSubview(lyricsSwitch)
 
-        lyricsAutoHideCheck = checkbox("Auto-hide lyrics when none found")
-        lyricsAutoHideCheck.state = settings.lyricsAutoHide ? .on : .off
-        lyricsAutoHideCheck.target = self; lyricsAutoHideCheck.action = #selector(lyricsAutoHideChanged)
-        view.addSubview(lyricsAutoHideCheck)
-        y -= 34
+        lyricsAutoHideLbl = rowLabel("Auto-hide when no lyrics found")
+        lyricsAutoHideLbl.frame = NSRect(x: 20, y: y, width: W - 100, height: 20)
+        view.addSubview(lyricsAutoHideLbl)
+        lyricsAutoHideSwitch.state = settings.lyricsAutoHide ? .on : .off
+        lyricsAutoHideSwitch.target = self; lyricsAutoHideSwitch.action = #selector(lyricsAutoHideChanged)
+        lyricsAutoHideSwitch.frame = NSRect(x: W - 64, y: y - 2, width: 44, height: 26)
+        view.addSubview(lyricsAutoHideSwitch)
 
-        // Custom file controls
-        customFileLabel = NSTextField(labelWithString: "")
         customFileLabel.frame = NSRect(x: 20, y: y, width: W - 40, height: 18)
-        customFileLabel.font = .systemFont(ofSize: 12)
+        customFileLabel.font = .systemFont(ofSize: 13)
         view.addSubview(customFileLabel)
-        y -= 28
 
         importBtn = NSButton(title: "Import File…", target: self, action: #selector(importCustomFile))
-        importBtn.frame = NSRect(x: 20, y: y, width: 140, height: 24)
+        importBtn.frame = NSRect(x: 20, y: y - 26, width: 150, height: 24)
         importBtn.bezelStyle = .rounded; importBtn.controlSize = .small
         view.addSubview(importBtn)
 
         resetCustomBtn = NSButton(title: "Clear", target: self, action: #selector(resetCustomPlayer))
-        resetCustomBtn.frame = NSRect(x: 170, y: y, width: 80, height: 24)
+        resetCustomBtn.frame = NSRect(x: 180, y: y - 26, width: 80, height: 24)
         resetCustomBtn.bezelStyle = .rounded; resetCustomBtn.controlSize = .small
         view.addSubview(resetCustomBtn)
-        y -= 40
 
-        // ── Footer ──────────────────────────────────────────────────────
+        // ── Footer ────────────────────────────────────────────────────────────
         footerBox = NSBox(); footerBox.boxType = .separator
-        footerBox.frame = NSRect(x: 20, y: y + 4, width: W - 40, height: 1)
+        footerBox.frame = NSRect(x: 20, y: 40, width: W - 40, height: 1)
         view.addSubview(footerBox)
 
         footerNote = NSTextField(wrappingLabelWithString: "Changes to port or volume control require restarting the server.")
@@ -306,7 +325,6 @@ final class SettingsViewController: NSViewController {
         let isCustom = (currentSelection == .customHTML || currentSelection == .customJS)
         let supportsLyr = currentSelection.supportsLyrics
 
-        // Determine file label text + color
         let fileName: String?
         if currentSelection == .customHTML {
             fileName = settings.customPlayerFileName
@@ -316,17 +334,22 @@ final class SettingsViewController: NSViewController {
             fileName = nil
         }
 
-        // Show/hide built-in controls
-        skipLabel.isHidden = isCustom
-        skipPopup.isHidden = isCustom
-        volumeCheck.isHidden = isCustom
-        lyricsCheck.isHidden = isCustom || !supportsLyr
-        lyricsAutoHideCheck.isHidden = isCustom || !supportsLyr || !settings.showLyrics
+        let showSkip     = !isCustom && currentSelection.supportsSkipInterval
+        let showVol      = !isCustom && currentSelection.supportsVolumeControl
+        let showLyr      = !isCustom && supportsLyr
+        let showAutoHide = showLyr && settings.showLyrics
 
-        // Show/hide custom controls
-        customFileLabel.isHidden = !isCustom
-        importBtn.isHidden = !isCustom
-        resetCustomBtn.isHidden = !isCustom
+        skipLabel.isHidden           = !showSkip
+        skipPopup.isHidden           = !showSkip
+        volumeLbl.isHidden           = !showVol
+        volumeSwitch.isHidden        = !showVol
+        lyricsLbl.isHidden           = !showLyr
+        lyricsSwitch.isHidden        = !showLyr
+        lyricsAutoHideLbl.isHidden   = !showAutoHide
+        lyricsAutoHideSwitch.isHidden = !showAutoHide
+        customFileLabel.isHidden     = !isCustom
+        importBtn.isHidden           = !isCustom
+        resetCustomBtn.isHidden      = !isCustom
 
         if isCustom {
             if let name = fileName {
@@ -341,46 +364,42 @@ final class SettingsViewController: NSViewController {
             resetCustomBtn.isEnabled = fileName != nil
         }
 
-        // Now reposition all dynamic controls from top of dynamic area down
-        // The dynamic area starts right below the theme popup row.
-        // We need to find the bottom of the theme picker and lay out from there.
-        // themePopup.frame.minY is the start of picker; dynamic content goes below.
-        let topY = themePopup.frame.minY - 10  // 10px gap below picker
+        // Reposition all dynamic controls below theme popup
+        let W   = view.frame.width
+        let topY = themePopup.frame.minY - 8
+        var y    = topY
+        let rowH: CGFloat = 34
+        let swX  = W - 64
 
-        var y = topY
-
-        func reposition(_ view: NSView, height: CGFloat, gap: CGFloat) {
-            guard !view.isHidden else { return }
-            y -= height
-            view.frame = NSRect(x: view.frame.minX, y: y, width: view.frame.width, height: height)
-            y -= gap
+        func switchRow(_ lbl: NSTextField, _ sw: NSSwitch) {
+            guard !lbl.isHidden else { return }
+            y -= rowH
+            lbl.frame = NSRect(x: 20, y: y + 7, width: W - 100, height: 20)
+            sw.frame  = NSRect(x: swX, y: y + 4, width: 44, height: 26)
+            y -= 4
         }
 
-        // Skip row (label + popup together)
-        if !skipLabel.isHidden {
-            y -= 18
-            let rowY = y
-            skipLabel.frame = NSRect(x: 20, y: rowY, width: 100, height: 18)
-            skipPopup.frame = NSRect(x: 130, y: rowY - 2, width: 130, height: 24)
-            y -= 14   // total row height ~32
+        if showSkip {
+            y -= rowH
+            skipLabel.frame = NSRect(x: 20, y: y + 8, width: 110, height: 18)
+            skipPopup.frame = NSRect(x: 140, y: y + 5, width: 150, height: 24)
+            y -= 4
         }
 
-        reposition(volumeCheck, height: 20, gap: 6)
-        reposition(lyricsCheck, height: 20, gap: 6)
-        reposition(lyricsAutoHideCheck, height: 20, gap: 10)
+        switchRow(volumeLbl, volumeSwitch)
+        switchRow(lyricsLbl, lyricsSwitch)
+        switchRow(lyricsAutoHideLbl, lyricsAutoHideSwitch)
 
-        // Custom file label
-        if !customFileLabel.isHidden {
-            y -= 18
-            customFileLabel.frame = NSRect(x: 20, y: y, width: themePopup.frame.width + themePopup.frame.minX - 20, height: 18)
-            y -= 10
-            importBtn.frame = NSRect(x: 20, y: y - 24, width: 160, height: 24)
-            resetCustomBtn.frame = NSRect(x: 190, y: y - 24, width: 80, height: 24)
+        if isCustom {
+            y -= 24
+            customFileLabel.frame = NSRect(x: 20, y: y, width: W - 40, height: 18)
+            y -= 8
+            importBtn.frame     = NSRect(x: 20,  y: y - 24, width: 150, height: 24)
+            resetCustomBtn.frame = NSRect(x: 180, y: y - 24, width: 80,  height: 24)
             y -= 34
         }
 
-        // Footer separator
-        footerBox.frame = NSRect(x: 20, y: y - 4, width: 380, height: 1)
+        footerBox.frame = NSRect(x: 20, y: y - 14, width: W - 40, height: 1)
     }
 
     // MARK: - Server refresh
@@ -431,18 +450,18 @@ final class SettingsViewController: NSViewController {
         NSPasteboard.general.setString(urlLabel.stringValue, forType: .string)
     }
 
-    @objc private func autoStartChanged() { settings.autoStartServer = autoStartCheck.state == .on }
-    @objc private func launchLoginChanged() { settings.launchAtLogin = launchLoginCheck.state == .on }
-    @objc private func skipChanged() { settings.skipInterval = [5,10,15,30][skipPopup.indexOfSelectedItem] }
-    @objc private func volumeChanged() { settings.showVolumeControl = volumeCheck.state == .on }
+    @objc private func autoStartChanged()    { settings.autoStartServer  = autoStartSwitch.state == .on }
+    @objc private func launchLoginChanged()  { settings.launchAtLogin    = launchLoginSwitch.state == .on }
+    @objc private func skipChanged()         { settings.skipInterval     = [5,10,15,30][skipPopup.indexOfSelectedItem] }
+    @objc private func volumeChanged()       { settings.showVolumeControl = volumeSwitch.state == .on }
 
     @objc private func lyricsChanged() {
-        settings.showLyrics = lyricsCheck.state == .on
+        settings.showLyrics = lyricsSwitch.state == .on
         updateDynamicSection()
     }
 
     @objc private func lyricsAutoHideChanged() {
-        settings.lyricsAutoHide = lyricsAutoHideCheck.state == .on
+        settings.lyricsAutoHide = lyricsAutoHideSwitch.state == .on
     }
 
     @objc private func themePickerChanged() {
@@ -454,13 +473,12 @@ final class SettingsViewController: NSViewController {
         switch currentSelection {
         case .theme(let t):
             settings.selectedTheme = t
-            // Clear custom files so built-in theme is used
             settings.customPlayerHTML = nil
             settings.customPlayerFileName = nil
             settings.customPlayerJS = nil
             settings.customPlayerJSFileName = nil
         case .customHTML, .customJS:
-            break  // file will be imported via importCustomFile
+            break
         }
 
         updateDynamicSection()
