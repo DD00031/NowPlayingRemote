@@ -7,10 +7,10 @@ DerivedData/
 *.mode2v3
 *.perspectivev3
 *.xcworkspace/xcuserdata/
-*.xcworkspace/xcshareddata/
-*.xcodeproj/xcshareddata/
+*.xcworkspace/xcshareddata/xcschemes/
 *.xcodeproj/xcuserdata/
-*.xcodeproj/project.xcworkspace/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/contents.xcworkspacedata
 *.xcprivacy
 
 # Xcode build products
